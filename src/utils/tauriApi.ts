@@ -23,8 +23,118 @@ import type {
 export class TauriApi {
   private static instance: TauriApi;
   private tokenExpiredUnlisten: (() => void) | null = null;
+  private isRefreshingToken = false;
+  private refreshPromise: Promise<boolean> | null = null;
 
   private constructor() {}
+
+  /**
+   * 清除登录状态
+   */
+  private clearAuthState(): void {
+    localStorage.removeItem('feishu_access_token');
+    localStorage.removeItem('feishu_refresh_token');
+    localStorage.removeItem('feishu_user_info');
+    // 可以触发一个事件通知应用程序用户需要重新登录
+    window.dispatchEvent(new CustomEvent('auth-expired'));
+  }
+
+  /**
+   * 尝试刷新访问令牌
+   */
+  private async tryRefreshToken(): Promise<boolean> {
+    if (this.isRefreshingToken && this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.isRefreshingToken = true;
+    this.refreshPromise = this.performTokenRefresh();
+    
+    try {
+      const result = await this.refreshPromise;
+      return result;
+    } finally {
+      this.isRefreshingToken = false;
+      this.refreshPromise = null;
+    }
+  }
+
+  /**
+   * 执行令牌刷新
+   */
+  private async performTokenRefresh(): Promise<boolean> {
+    try {
+      const refreshToken = localStorage.getItem('feishu_refresh_token');
+      if (!refreshToken) {
+        console.warn('没有刷新令牌，无法刷新访问令牌');
+        this.clearAuthState();
+        return false;
+      }
+
+      const response = await this.refreshAccessToken(refreshToken);
+      if (response.code === 0 && response.data) {
+        // 更新存储的令牌
+        localStorage.setItem('feishu_access_token', response.data.access_token);
+        if (response.data.refresh_token) {
+          localStorage.setItem('feishu_refresh_token', response.data.refresh_token);
+        }
+        console.log('访问令牌刷新成功');
+        return true;
+      } else {
+        console.error('刷新访问令牌失败:', response.msg);
+        this.clearAuthState();
+        return false;
+      }
+    } catch (error) {
+      console.error('刷新访问令牌时发生错误:', error);
+      this.clearAuthState();
+      return false;
+    }
+  }
+
+  /**
+   * 包装API调用，自动处理401错误和令牌刷新
+   */
+  private async withTokenRefresh<T>(apiCall: (accessToken: string) => Promise<T>, accessToken?: string): Promise<T> {
+    // 如果没有提供accessToken，从localStorage获取
+    const currentToken = accessToken || localStorage.getItem('feishu_access_token');
+    if (!currentToken) {
+      throw new Error('未找到访问令牌，请先登录');
+    }
+
+    try {
+      return await apiCall(currentToken);
+    } catch (error: any) {
+      // 检查是否是401错误或包含认证失败的信息
+      const is401Error = 
+        (error?.code === 401) ||
+        (error?.response?.status === 401) ||
+        (error?.message && error.message.includes('401')) ||
+        (error?.msg && (error.msg.includes('token') || error.msg.includes('unauthorized')));
+
+      if (is401Error) {
+        console.log('检测到401错误，尝试刷新令牌...');
+        const refreshSuccess = await this.tryRefreshToken();
+        
+        if (refreshSuccess) {
+          console.log('令牌刷新成功，重试API调用...');
+          // 获取刷新后的新token
+          const newToken = localStorage.getItem('feishu_access_token');
+          if (!newToken) {
+            throw new Error('刷新令牌后未找到新的访问令牌');
+          }
+          // 使用新token重试原始API调用
+          return await apiCall(newToken);
+        } else {
+          console.error('令牌刷新失败，用户需要重新登录');
+          throw new Error('认证失败，请重新登录');
+        }
+      }
+      
+      // 如果不是401错误，直接抛出原始错误
+      throw error;
+    }
+  }
 
   /**
    * 获取单例实例
@@ -54,58 +164,58 @@ export class TauriApi {
 
   /**
    * 获取用户信息
-   * @param accessToken 访问令牌
+   * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
-  async getUserInfo(accessToken: string): Promise<ApiResponse> {
-    return await invoke('get_user_info', { accessToken });
+  async getUserInfo(accessToken?: string): Promise<ApiResponse> {
+    return await this.withTokenRefresh((token) => invoke('get_user_info', { accessToken: token }), accessToken);
   }
 
   /**
    * 获取根文件夹元数据
-   * @param accessToken 访问令牌
+   * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
-  async getRootFolderMeta(accessToken: string): Promise<ApiResponse<FeishuFolder>> {
-    return await invoke('get_root_folder_meta', { accessToken });
+  async getRootFolderMeta(accessToken?: string): Promise<ApiResponse<FeishuFolder>> {
+    return await this.withTokenRefresh((token) => invoke('get_root_folder_meta', { accessToken: token }), accessToken);
   }
 
   /**
    * 获取文件夹文件列表
-   * @param accessToken 访问令牌
    * @param folderToken 文件夹令牌
    * @param pageSize 页面大小
+   * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
   async getFolderFiles(
-    accessToken: string,
     folderToken?: string,
-    pageSize?: number
+    pageSize?: number,
+    accessToken?: string
   ): Promise<ApiResponse<{ files: FeishuFile[]; folders: FeishuFolder[] }>> {
-    return await invoke('get_folder_files', { accessToken, folderToken, pageSize });
+    return await this.withTokenRefresh((token) => invoke('get_folder_files', { accessToken: token, folderToken, pageSize }), accessToken);
   }
 
   /**
    * 获取知识库空间列表
-   * @param accessToken 访问令牌
    * @param pageSize 页面大小
+   * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
   async getWikiSpaces(
-    accessToken: string,
-    pageSize?: number
+    pageSize?: number,
+    accessToken?: string
   ): Promise<ApiResponse<{ items: FeishuWikiSpace[] }>> {
-    return await invoke('get_wiki_spaces', { accessToken, pageSize });
+    return await this.withTokenRefresh((token) => invoke('get_wiki_spaces', { accessToken: token, pageSize }), accessToken);
   }
 
   /**
    * 获取知识库空间节点
-   * @param accessToken 访问令牌
    * @param spaceId 空间ID
-   * @param parentToken 父节点令牌
+   * @param parentNodeToken 父节点令牌
+   * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
   async getWikiSpaceNodes(
-    accessToken: string,
     spaceId?: string,
-    parentNodeToken?: string
+    parentNodeToken?: string,
+    accessToken?: string
   ): Promise<ApiResponse<{ items: FeishuWikiNode[] }>> {
-    return await invoke('get_wiki_space_nodes', { accessToken, spaceId, parentNodeToken });
+    return await this.withTokenRefresh((token) => invoke('get_wiki_space_nodes', { accessToken: token, spaceId, parentNodeToken }), accessToken);
   }
 
   /**
@@ -214,10 +324,10 @@ export class TauriApi {
   /**
    * 执行下载任务
    * @param taskId 任务ID
-   * @param accessToken 访问令牌
+   * @param accessToken 访问令牌（可选）
    */
-  async executeDownloadTask(taskId: string, accessToken: string): Promise<boolean> {
-    return await invoke('execute_download_task', { taskId, accessToken });
+  async executeDownloadTask(taskId: string, accessToken?: string): Promise<boolean> {
+    return await this.withTokenRefresh((token) => invoke('execute_download_task', { taskId, accessToken: token }), accessToken);
   }
 
   /**
@@ -232,10 +342,10 @@ export class TauriApi {
    * 重试下载文件
    * @param taskId 任务ID
    * @param fileToken 文件令牌
-   * @param accessToken 访问令牌
+   * @param accessToken 访问令牌（可选）
    */
-  async retryDownloadFile(taskId: string, fileToken: string, accessToken: string): Promise<boolean> {
-    return await invoke('retry_download_file', { taskId, fileToken, accessToken });
+  async retryDownloadFile(taskId: string, fileToken: string, accessToken?: string): Promise<boolean> {
+    return await this.withTokenRefresh((token) => invoke('retry_download_file', { taskId, fileToken, accessToken: token }), accessToken);
   }
 
   /**
@@ -247,9 +357,10 @@ export class TauriApi {
 
   /**
    * 恢复所有pending状态的下载任务
+   * @param accessToken 访问令牌（可选）
    */
-  async resumePendingDownloadTasks(accessToken: string): Promise<string> {
-    return await invoke('resume_pending_download_tasks', { accessToken });
+  async resumePendingDownloadTasks(accessToken?: string): Promise<string> {
+    return await this.withTokenRefresh((token) => invoke('resume_pending_download_tasks', { accessToken: token }), accessToken);
   }
 
   /**

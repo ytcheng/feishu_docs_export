@@ -580,12 +580,6 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
    */
   const handleRetryFailedFiles = async (taskId: string) => {
     try {
-      const access_token = localStorage.getItem('feishu_access_token');
-      if (!access_token) {
-        message.error('请先登录飞书账号');
-        return;
-      }
-      
       // 找到对应的任务
       const task = tasks.find(t => t.id === taskId);
       if (!task) {
@@ -605,7 +599,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
       // 逐个重试失败的文件
       for (const file of failedFiles) {
         try {
-          await tauriApi.retryDownloadFile(taskId, file.token, access_token);
+          await tauriApi.retryDownloadFile(taskId, file.token);
         } catch (error) {
           console.error(`重试文件 ${file.name} 失败:`, error);
         }

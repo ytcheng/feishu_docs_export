@@ -56,13 +56,7 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
    */
   const getRootFolderMeta = async (): Promise<{ token: string; id: string; user_id: string } | null> => {
     try {
-      const accessToken = localStorage.getItem('feishu_access_token');
-      if (!accessToken) {
-        message.error('未找到访问令牌，请重新登录');
-        return null;
-      }
-
-      const response = await tauriApi.getRootFolderMeta(accessToken);
+      const response = await tauriApi.getRootFolderMeta();
       console.log('根文件夹元数据:', response);
       
       if (response.code === 0 && response.data) {
@@ -87,13 +81,8 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
    */
   const getFolderFiles = async (folderToken?: string): Promise<FileItem[]> => {
     try {
-      const accessToken = localStorage.getItem('feishu_access_token');
-      if (!accessToken) {
-        message.error('未找到访问令牌，请重新登录');
-        return [];
-      }
       console.log("folderToken", folderToken);
-      const response = await tauriApi.getFolderFiles(accessToken, folderToken, 200);
+      const response = await tauriApi.getFolderFiles(folderToken, 200);
       console.log('文件列表响应:', response);
       
       if (response.code === 0 && response.data) {
@@ -117,13 +106,7 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
    */
   const getWikiSpaces = async (): Promise<FileItem[]> => {
     try {
-      const accessToken = localStorage.getItem('feishu_access_token');
-      if (!accessToken) {
-        message.error('未找到访问令牌，请重新登录');
-        return [];
-      }
-      
-      const response = await tauriApi.getWikiSpaces(accessToken, 20);
+      const response = await tauriApi.getWikiSpaces(20);
       console.log('知识空间列表响应:', response);
       
       if (response.code === 0 && response.data) {
@@ -150,18 +133,12 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
   const getWikiSpaceNodes = async (spaceId?: string, parentToken?: string): Promise<FileItem[]> => {
     console.log("getWikiSpaceNodes", spaceId, parentToken);
     try {
-      const accessToken = localStorage.getItem('feishu_access_token');
-      if (!accessToken) {
-        message.error('未找到访问令牌，请重新登录');
-        return [];
-      }
-      
       if (!spaceId) {
         message.error('知识空间ID不能为空');
         return [];
       }
       
-      const response = await tauriApi.getWikiSpaceNodes(accessToken, spaceId, parentToken);
+      const response = await tauriApi.getWikiSpaceNodes(spaceId, parentToken);
       console.log('知识空间子节点响应:', response);
       
       if (response.code === 0 && response.data) {
@@ -564,14 +541,9 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
       }
       // 自动开始下载任务
       try {
-        const accessToken = localStorage.getItem('feishu_access_token');
-        if (accessToken) {
-          message.info('正在开始下载任务...');
-          await tauriApi.executeDownloadTask(taskId, accessToken);
-          message.success('下载任务已开始');
-        } else {
-          message.warning('未找到访问令牌，请手动开始下载任务');
-        }
+        message.info('正在开始下载任务...');
+        await tauriApi.executeDownloadTask(taskId);
+        message.success('下载任务已开始');
       } catch (executeError) {
         console.error('自动开始下载任务失败:', executeError);
         // 提取错误信息

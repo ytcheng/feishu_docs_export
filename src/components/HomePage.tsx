@@ -113,13 +113,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
    */
   const getFolderFiles = async (folderToken?: string): Promise<FileItem[]> => {
     try {
-      const accessToken = localStorage.getItem('feishu_access_token');
-      if (!accessToken) {
-        message.error('未找到访问令牌，请重新登录');
-        return [];
-      }
-      
-      const response = await tauriApi.getFolderFiles(accessToken, folderToken, 20);
+      const response = await tauriApi.getFolderFiles(folderToken, 20);
       
       if (response.code === 0 && response.data) {
         const allFiles = [
@@ -151,13 +145,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
    */
   const getWikiSpaces = async (): Promise<FileItem[]> => {
     try {
-      const accessToken = localStorage.getItem('feishu_access_token');
-      if (!accessToken) {
-        message.error('未找到访问令牌，请重新登录');
-        return [];
-      }
-      
-      const response = await tauriApi.getWikiSpaces(accessToken, 20);
+      const response = await tauriApi.getWikiSpaces(20);
       
       if (response.code === 0 && response.data) {
         return (response.data.items || []).map((space: any) => ({
@@ -183,18 +171,12 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
    */
   const getWikiSpaceNodes = async (spaceId?: string, parentToken?: string): Promise<FileItem[]> => {
     try {
-      const accessToken = localStorage.getItem('feishu_access_token');
-      if (!accessToken) {
-        message.error('未找到访问令牌，请重新登录');
-        return [];
-      }
-      
       if (!spaceId) {
         message.error('知识空间ID不能为空');
         return [];
       }
       
-      const response = await tauriApi.getWikiSpaceNodes(accessToken, spaceId, parentToken);
+      const response = await tauriApi.getWikiSpaceNodes(spaceId, parentToken);
       
       if (response.code === 0 && response.data) {
         return (response.data.items || []).map((node: any) => ({
@@ -223,13 +205,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
    */
   const getRootFolderMeta = async (): Promise<any> => {
     try {
-      const accessToken = localStorage.getItem('feishu_access_token');
-      if (!accessToken) {
-        message.error('未找到访问令牌，请重新登录');
-        return null;
-      }
-      
-      const response = await tauriApi.getRootFolderMeta(accessToken);
+      const response = await tauriApi.getRootFolderMeta();
       
       if (response.code === 0 && response.data) {
         return response.data;
