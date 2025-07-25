@@ -335,7 +335,7 @@ impl Database {
         .bind(&file.relative_path)
         .bind(&file.space_id)
         .bind(&file.status)
-        .bind(&file.error_message)
+        .bind(&file.error)
         .bind(&now)
         .bind(&now)
         .execute(&self.pool)
@@ -366,7 +366,7 @@ impl Database {
             .bind(&file.relative_path)
             .bind(&file.space_id)
             .bind(&file.status)
-            .bind(&file.error_message)
+            .bind(&file.error)
             .bind(&now)
             .bind(&now)
             .execute(&self.pool)
@@ -396,7 +396,7 @@ impl Database {
                 relative_path: row.get("relative_path"),
                 space_id: row.get("space_id"),
                 status: row.get("status"),
-                error_message: row.get("error_message"),
+                error: row.get("error_message"),
             });
         }
 
@@ -411,7 +411,7 @@ impl Database {
         task_id: &str,
         file_token: &str,
         status: &str,
-        error_message: Option<&str>,
+        error: Option<&str>,
     ) -> Result<(), sqlx::Error> {
         let now = chrono::Utc::now().to_rfc3339();
         
@@ -419,7 +419,7 @@ impl Database {
             "UPDATE download_files SET status = ?, error_message = ?, updated_at = ? WHERE task_id = ? AND token = ?"
         )
         .bind(status)
-        .bind(error_message)
+        .bind(error)
         .bind(&now)
         .bind(task_id)
         .bind(file_token)

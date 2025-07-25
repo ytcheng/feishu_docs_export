@@ -407,9 +407,9 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
          );
          
          // 如果状态是失败且有错误信息，显示鼠标悬停提示
-         if (status === 'failed' && (record as any).errorMessage) {
+         if (status === 'failed' && record.error) {
            return (
-             <Tooltip title={(record as any).errorMessage} placement="top">
+             <Tooltip title={record.error} placement="top">
                {statusTag}
              </Tooltip>
            );

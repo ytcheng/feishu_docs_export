@@ -140,7 +140,7 @@ struct FileInfo {
     #[serde(rename = "spaceId")]
     space_id: Option<String>,
     status: String, // pending, downloading, completed, failed
-    error_message: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
