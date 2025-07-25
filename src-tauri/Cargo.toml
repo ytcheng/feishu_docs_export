@@ -36,3 +36,4 @@ url = "2.5.4"
 tokio-util = { version = "0.7", features = ["io"] }
 futures-util = "0.3"
 urlencoding = "2.1"
+sqlx = { version = "0.6", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }

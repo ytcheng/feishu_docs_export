@@ -10,6 +10,9 @@ use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 use chrono;
 
+mod database;
+use database::Database;
+
 
 
 // 飞书应用配置
@@ -184,7 +187,7 @@ struct DownloadProgress {
 // 应用状态
 struct AppState {
     http_client: Client,
-    download_tasks: Arc<Mutex<HashMap<String, DownloadTask>>>,
+    db: Arc<Database>,
     active_downloads: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
 }
 
@@ -411,7 +414,6 @@ async fn create_download_task(
     task_request: CreateDownloadTaskRequest,
     state: State<'_, AppState>
 ) -> Result<DownloadTask, String> {
-    let mut tasks = state.download_tasks.lock().unwrap();
     let task_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -431,7 +433,9 @@ async fn create_download_task(
         files: task_request.files,
     };
     
-    tasks.insert(task_id, new_task.clone());
+    state.db.create_task(&new_task).await
+        .map_err(|e| format!("创建任务失败: {}", e))?;
+    
     Ok(new_task)
 }
 
@@ -440,8 +444,8 @@ async fn create_download_task(
  */
 #[tauri::command]
 async fn get_download_tasks(state: State<'_, AppState>) -> Result<Vec<DownloadTask>, String> {
-    let tasks = state.download_tasks.lock().unwrap();
-    Ok(tasks.values().cloned().collect())
+    state.db.get_all_tasks().await
+        .map_err(|e| format!("获取任务列表失败: {}", e))
 }
 
 /**
@@ -450,26 +454,67 @@ async fn get_download_tasks(state: State<'_, AppState>) -> Result<Vec<DownloadTa
 #[tauri::command]
 async fn update_download_task(
     task_id: String,
-    _updates: serde_json::Value,
+    updates: serde_json::Value,
     state: State<'_, AppState>
 ) -> Result<bool, String> {
-    let mut tasks = state.download_tasks.lock().unwrap();
-    if let Some(task) = tasks.get_mut(&task_id) {
-        // 这里应该实现更新逻辑
-        task.updated_at = chrono::Utc::now().to_rfc3339();
-        Ok(true)
-    } else {
-        Ok(false)
+    // 先获取现有任务
+    let mut task = match state.db.get_task(&task_id).await {
+        Ok(Some(task)) => task,
+        Ok(None) => return Ok(false),
+        Err(e) => return Err(format!("获取任务失败: {}", e)),
+    };
+    
+    // 更新字段
+    if let Some(name) = updates.get("name").and_then(|v| v.as_str()) {
+        task.name = name.to_string();
     }
+    if let Some(description) = updates.get("description").and_then(|v| v.as_str()) {
+        task.description = Some(description.to_string());
+    }
+    if let Some(status) = updates.get("status").and_then(|v| v.as_str()) {
+        task.status = status.to_string();
+    }
+    if let Some(progress) = updates.get("progress").and_then(|v| v.as_f64()) {
+        task.progress = progress;
+    }
+    if let Some(total_files) = updates.get("total_files").and_then(|v| v.as_i64()) {
+        task.total_files = total_files as i32;
+    }
+    if let Some(downloaded_files) = updates.get("downloaded_files").and_then(|v| v.as_i64()) {
+        task.downloaded_files = downloaded_files as i32;
+    }
+    if let Some(failed_files) = updates.get("failed_files").and_then(|v| v.as_i64()) {
+        task.failed_files = failed_files as i32;
+    }
+    if let Some(output_path) = updates.get("output_path").and_then(|v| v.as_str()) {
+        task.output_path = output_path.to_string();
+    }
+    if let Some(source_type) = updates.get("source_type").and_then(|v| v.as_str()) {
+        task.source_type = source_type.to_string();
+    }
+    if let Some(files) = updates.get("files") {
+        task.files = Some(files.clone());
+    }
+    
+    task.updated_at = chrono::Utc::now().to_rfc3339();
+    
+    state.db.update_task(&task).await
+        .map_err(|e| format!("更新任务失败: {}", e))?;
+    
+    Ok(true)
 }
 
 /**
  * 删除下载任务
  */
 #[tauri::command]
-async fn delete_download_task(id: String, state: State<'_, AppState>) -> Result<bool, String> {
-    let mut tasks = state.download_tasks.lock().unwrap();
-    Ok(tasks.remove(&id).is_some())
+async fn delete_download_task(
+    task_id: String,
+    state: State<'_, AppState>
+) -> Result<bool, String> {
+    state.db.delete_task(&task_id).await
+        .map_err(|e| format!("删除任务失败: {}", e))?;
+    Ok(true)
 }
 
 /**
@@ -682,12 +727,9 @@ async fn execute_download_task(
     }
     
     // 获取任务信息
-    let task = {
-        let tasks = state.download_tasks.lock().unwrap();
-        tasks.get(&task_id).cloned()
-    };
-    
-    let task = task.ok_or_else(|| format!("任务 {} 不存在", task_id))?;
+    let task = state.db.get_task(&task_id).await
+        .map_err(|e| format!("获取任务失败: {}", e))?
+        .ok_or_else(|| format!("任务 {} 不存在", task_id))?;
     
     // 解析文件列表
     let files: Vec<FileInfo> = if let Some(files_value) = &task.files {
@@ -702,7 +744,7 @@ async fn execute_download_task(
     let access_token_clone = access_token.clone();
     let output_path = task.output_path.clone();
     let client = state.http_client.clone();
-    let download_tasks = Arc::clone(&state.download_tasks);
+    let db = Arc::clone(&state.db);
     let active_downloads = Arc::clone(&state.active_downloads);
     
     // 启动后台下载任务
@@ -712,14 +754,8 @@ async fn execute_download_task(
         let mut failed_files = 0;
         
         // 更新任务状态为下载中
-        {
-            let mut tasks = download_tasks.lock().unwrap();
-            if let Some(task) = tasks.get_mut(&task_id_clone) {
-                task.status = "downloading".to_string();
-                task.progress = 0.0;
-                task.updated_at = chrono::Utc::now().to_rfc3339();
-            }
-        }
+        let _ = db.update_task_status(&task_id_clone, "downloading").await;
+        let _ = db.update_task_progress(&task_id_clone, 0.0, 0, 0).await;
         
         // 发送初始进度事件
         let _ = app_handle.emit("download-progress", DownloadProgress {
@@ -751,12 +787,10 @@ async fn execute_download_task(
             files_with_status[index]["status"] = serde_json::Value::String("downloading".to_string());
             
             // 更新任务中的文件列表
-            {
-                let mut tasks = download_tasks.lock().unwrap();
-                if let Some(task) = tasks.get_mut(&task_id_clone) {
-                    task.files = Some(serde_json::Value::Array(files_with_status.clone()));
-                    task.updated_at = chrono::Utc::now().to_rfc3339();
-                }
+            if let Ok(Some(mut task)) = db.get_task(&task_id_clone).await {
+                task.files = Some(serde_json::Value::Array(files_with_status.clone()));
+                task.updated_at = chrono::Utc::now().to_rfc3339();
+                let _ = db.update_task(&task).await;
             }
             
             // 发送当前文件进度
@@ -833,15 +867,13 @@ async fn execute_download_task(
             
             // 更新任务进度和文件列表
             let progress = (completed_files as f64 / total_files as f64) * 100.0;
-            {
-                let mut tasks = download_tasks.lock().unwrap();
-                if let Some(task) = tasks.get_mut(&task_id_clone) {
-                    task.progress = progress;
-                    task.downloaded_files = completed_files;
-                    task.failed_files = failed_files;
-                    task.files = Some(serde_json::Value::Array(files_with_status.clone()));
-                    task.updated_at = chrono::Utc::now().to_rfc3339();
-                }
+            let _ = db.update_task_progress(&task_id_clone, progress, completed_files, failed_files).await;
+            
+            // 更新文件列表
+            if let Ok(Some(mut task)) = db.get_task(&task_id_clone).await {
+                task.files = Some(serde_json::Value::Array(files_with_status.clone()));
+                task.updated_at = chrono::Utc::now().to_rfc3339();
+                let _ = db.update_task(&task).await;
             }
             
             // 发送进度更新事件
@@ -864,14 +896,15 @@ async fn execute_download_task(
             "partial"
         };
         
-        {
-            let mut tasks = download_tasks.lock().unwrap();
-            if let Some(task) = tasks.get_mut(&task_id_clone) {
-                task.status = final_status.to_string();
-                task.progress = 100.0;
-                task.files = Some(serde_json::Value::Array(files_with_status.clone()));
-                task.updated_at = chrono::Utc::now().to_rfc3339();
-            }
+        // 更新最终任务状态
+        let _ = db.update_task_status(&task_id_clone, final_status).await;
+        let _ = db.update_task_progress(&task_id_clone, 100.0, completed_files, failed_files).await;
+        
+        // 更新最终文件列表
+        if let Ok(Some(mut task)) = db.get_task(&task_id_clone).await {
+            task.files = Some(serde_json::Value::Array(files_with_status.clone()));
+            task.updated_at = chrono::Utc::now().to_rfc3339();
+            let _ = db.update_task(&task).await;
         }
         
         // 发送完成事件
@@ -948,13 +981,7 @@ async fn stop_download_task(
         handle.abort();
         
         // 更新任务状态
-        {
-            let mut tasks = state.download_tasks.lock().unwrap();
-            if let Some(task) = tasks.get_mut(&task_id) {
-                task.status = "cancelled".to_string();
-                task.updated_at = chrono::Utc::now().to_rfc3339();
-            }
-        }
+        let _ = state.db.update_task_status(&task_id, "cancelled").await;
         
         println!("下载任务已停止: {}", task_id);
         Ok(true)
@@ -968,37 +995,69 @@ async fn stop_download_task(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app_state = AppState {
-        http_client: Client::new(),
-        download_tasks: Arc::new(Mutex::new(HashMap::new())),
-        active_downloads: Arc::new(Mutex::new(HashMap::new())),
-    };
-    
-    tauri::Builder::default()
-        .plugin(tauri_plugin_oauth::init())
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_shell::init())
-        .manage(app_state)
-        .invoke_handler(tauri::generate_handler![
-            get_access_token,
-            refresh_access_token,
-            get_user_info,
-            get_root_folder_meta,
-            get_folder_files,
-            get_wiki_spaces,
-            get_wiki_space_nodes,
-            create_download_task,
-            get_download_tasks,
-            update_download_task,
-            delete_download_task,
-            execute_download_task,
-            retry_download_file,
-            resume_download_tasks,
-            stop_download_task
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    tauri::async_runtime::block_on(async {
+        // 获取应用数据目录
+        let app_data_dir = std::env::current_dir().unwrap().join(".data");
+        println!("数据目录路径: {:?}", app_data_dir);
+        
+        // 确保数据目录存在
+        if !app_data_dir.exists() {
+            println!("创建数据目录: {:?}", app_data_dir);
+            std::fs::create_dir_all(&app_data_dir)
+                .expect("Failed to create data directory");
+        } else {
+            println!("数据目录已存在: {:?}", app_data_dir);
+        }
+        
+        let db_path = app_data_dir.join("feishu_export.db");
+        let db_path_str = db_path.to_string_lossy().to_string();
+        println!("数据库文件路径: {}", db_path_str);
+        
+        // 检查目录权限
+        match std::fs::metadata(&app_data_dir) {
+            Ok(metadata) => {
+                println!("目录权限: {:?}", metadata.permissions());
+            }
+            Err(e) => {
+                println!("无法获取目录元数据: {}", e);
+            }
+        }
+        
+        let database = Database::new(&db_path_str).await
+            .expect("Failed to initialize database");
+        
+        let app_state = AppState {
+            http_client: Client::new(),
+            db: Arc::new(database),
+            active_downloads: Arc::new(Mutex::new(HashMap::new())),
+        };
+        
+        tauri::Builder::default()
+            .plugin(tauri_plugin_oauth::init())
+            .plugin(tauri_plugin_opener::init())
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_fs::init())
+            .plugin(tauri_plugin_http::init())
+            .plugin(tauri_plugin_shell::init())
+            .manage(app_state)
+            .invoke_handler(tauri::generate_handler![
+                get_access_token,
+                refresh_access_token,
+                get_user_info,
+                get_root_folder_meta,
+                get_folder_files,
+                get_wiki_spaces,
+                get_wiki_space_nodes,
+                create_download_task,
+                get_download_tasks,
+                update_download_task,
+                delete_download_task,
+                execute_download_task,
+                retry_download_file,
+                resume_download_tasks,
+                stop_download_task
+            ])
+            .run(tauri::generate_context!())
+            .expect("error while running tauri application");
+    });
 }
