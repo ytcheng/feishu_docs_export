@@ -1,0 +1,70 @@
+{
+  "name": "feishu_export",
+  "version": "1.0.0",
+  "description": "飞书文档导出助手",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "start": "concurrently \"npm:dev\" \"npm:electron\"",
+    "dev": "NODE_ENV=development webpack serve --config webpack.renderer.config.js --mode development",
+    "electron": "NODE_ENV=development tsc && NODE_ENV=development electron ./dist/main/index.js",
+    "build:main": "webpack --config webpack.main.config.js --mode production",
+    "build:renderer": "webpack --config webpack.renderer.config.js --mode production",
+    "build:preload": "webpack --config webpack.preload.config.js --mode production",
+    "build": "npm run build:main && npm run build:renderer && npm run build:preload",
+    "build:mac": "npm run build && electron-builder --mac --arm64",
+    "build:win": "npm run build && electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.feishu.export",
+    "productName": "飞书文档导出助手",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "dist/**/*",
+      "!**/node_modules/*",
+      "node_modules/@larksuiteoapi/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        "dir",
+        "zip"
+      ],"identity": "MySelfSign"
+    }
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.53.0"
+  },
+  "devDependencies": {
+    "@ant-design/icons": "^6.0.0",
+    "@types/node": "^22.16.5",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "antd": "^5.26.6",
+    "concurrently": "^9.2.0",
+    "css-loader": "^7.1.2",
+    "electron": "^37.2.3",
+    "electron-builder": "^26.0.12",
+    "html-webpack-plugin": "^5.6.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.3",
+    "webpack": "^5.100.2",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.2"
+  }
+}
