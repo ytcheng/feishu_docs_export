@@ -1045,60 +1045,6 @@ async fn start_download_task(
 }
 
 /**
- * 恢复下载任务（手动恢复）
- */
-#[tauri::command]
-async fn resume_download_tasks(
-    access_token: String,
-    app_handle: AppHandle,
-    state: State<'_, AppState>
-) -> Result<(), String> {
-    println!("手动恢复下载任务");
-    
-    // 获取所有状态为pending的任务
-    let pending_tasks = match state.db.get_tasks_by_status("pending").await {
-        Ok(tasks) => tasks,
-        Err(e) => {
-            let error_msg = format!("获取pending任务失败: {}", e);
-            println!("{}", error_msg);
-            return Err(error_msg);
-        }
-    };
-    
-    if pending_tasks.is_empty() {
-        println!("没有需要恢复的下载任务");
-        return Ok(());
-    }
-    
-    println!("找到 {} 个需要恢复的下载任务", pending_tasks.len());
-    
-    // 为每个任务重新启动下载
-    for task in pending_tasks {
-        println!("恢复下载任务: {} - {}", task.id, task.name);
-        
-        // 检查任务是否已经在运行
-        {
-            let active_downloads = state.active_downloads.lock().unwrap();
-            if active_downloads.contains_key(&task.id) {
-                println!("任务 {} 已在运行中，跳过", task.id);
-                continue;
-            }
-        }
-        
-        // 重新启动下载任务，使用断点续传模式
-         let task_id_for_error = task.id.clone();
-         if let Err(e) = start_download_task_with_resume(task, access_token.clone(), app_handle.clone(), state.clone(), true).await {
-             println!("恢复任务 {} 失败: {}", task_id_for_error, e);
-             // 将失败的任务状态更新为失败
-             let _ = state.db.update_task_status(&task_id_for_error, "failed").await;
-         }
-    }
-    
-    println!("下载任务恢复完成");
-    Ok(())
-}
-
-/**
  * 恢复所有下载中状态的任务（不再使用pending状态）
  */
 #[tauri::command]
@@ -1223,14 +1169,7 @@ pub fn run() {
             active_downloads: Arc::new(Mutex::new(HashMap::new())),
         };
         
-        // 在应用启动时恢复下载任务
-        let app_state_clone = AppState {
-            http_client: app_state.http_client.clone(),
-            db: app_state.db.clone(),
-            active_downloads: app_state.active_downloads.clone(),
-        };
         
-        // 移除启动时的任务状态重置逻辑，因为resume_downloading_tasks现在直接处理downloading状态的任务
         
         tauri::Builder::default()
             .plugin(tauri_plugin_oauth::init())
