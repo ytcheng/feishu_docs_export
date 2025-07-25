@@ -543,7 +543,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         }
       >
         <Spin spinning={loading}>
-          <div style={{ height: 'calc(100vh - 280px)', overflow: 'auto' }}>
+          <div style={{ height: 'calc(100vh - 180px)', overflow: 'auto' }}>
             <Table
               columns={taskColumns}
               dataSource={tasks}

@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Tree, Button, Space, message, Spin, Typography, Badge } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import { Card, Tree, Button, Space, message, Spin, Typography } from 'antd';
+import { 
+  DownloadOutlined, 
+  FolderOutlined, 
+  BookOutlined, 
+  HomeOutlined,
+  FileTextOutlined,
+  TableOutlined,
+  DatabaseOutlined,
+  PaperClipOutlined,
+  FileOutlined,
+  FolderOpenOutlined
+} from '@ant-design/icons';
 import { open } from '@tauri-apps/plugin-dialog';
 import { tauriApi } from '../utils/tauriApi';
 import type { DownloadTask, DownloadFile } from '../types';
@@ -40,36 +51,39 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
   const [savePath, setSavePath] = useState('');
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
 
   /**
    * 根据文件类型获取图标
    */
   const getFileIcon = (type: string, hasChild?: boolean) => {
-    const iconStyle = { fontSize: '16px' };
+    const iconStyle = { 
+      fontSize: '16px'
+    };
     
     switch (type) {
       case 'folder':
-        return <span style={{ ...iconStyle, color: '#1890ff' }}>📁</span>;
+        return <FolderOutlined style={{ ...iconStyle, color: '#1890ff' }} />;
       case 'wiki_space':
-        return <span style={{ ...iconStyle, color: '#52c41a' }}>📚</span>;
+        return <BookOutlined style={{ ...iconStyle, color: '#52c41a' }} />;
       case 'wiki_root':
-        return <span style={{ ...iconStyle, color: '#722ed1' }}>🏠</span>;
+        return <HomeOutlined style={{ ...iconStyle, color: '#722ed1' }} />;
       case 'wiki_node':
         if (hasChild) {
-          return <span style={{ ...iconStyle, color: '#fa8c16' }}>📂</span>;
+          return <FolderOpenOutlined style={{ ...iconStyle, color: '#fa8c16' }} />;
         }
-        return <span style={{ ...iconStyle, color: '#13c2c2' }}>📄</span>;
+        return <FileTextOutlined style={{ ...iconStyle, color: '#13c2c2' }} />;
       case 'doc':
       case 'docx':
-        return <span style={{ ...iconStyle, color: '#1890ff' }}>📝</span>;
+        return <FileTextOutlined style={{ ...iconStyle, color: '#1890ff' }} />;
       case 'sheet':
-        return <span style={{ ...iconStyle, color: '#52c41a' }}>📊</span>;
+        return <TableOutlined style={{ ...iconStyle, color: '#52c41a' }} />;
       case 'bitable':
-        return <span style={{ ...iconStyle, color: '#722ed1' }}>🗃️</span>;
+        return <DatabaseOutlined style={{ ...iconStyle, color: '#722ed1' }} />;
       case 'file':
-        return <span style={{ ...iconStyle, color: '#fa541c' }}>📎</span>;
+        return <PaperClipOutlined style={{ ...iconStyle, color: '#fa541c' }} />;
       default:
-        return <span style={{ ...iconStyle, color: '#8c8c8c' }}>📄</span>;
+        return <FileOutlined style={{ ...iconStyle, color: '#8c8c8c' }} />;
     }
   };
 
@@ -377,7 +391,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
       if (type === 'folder') {
         files = await getFolderFiles(token);
       } else if (type === 'wiki_space') {
-        files = await getWikiSpaceNodes(spaceId!, token);
+        files = await getWikiSpaceNodes(spaceId!);
       } else if (type === 'wiki_root') {
         files = await getWikiSpaces();
       } else if (type === 'wiki_node') {
@@ -609,35 +623,83 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
     return () => clearInterval(interval);
   }, []);
 
+  // 多任务轮播效果
+  useEffect(() => {
+    const downloadingTasks = tasks.filter(task => task.status === 'downloading');
+    if (downloadingTasks.length > 1) {
+      const carouselInterval = setInterval(() => {
+        setCurrentTaskIndex(prev => (prev + 1) % downloadingTasks.length);
+      }, 2000); // 每2秒切换一次
+      return () => clearInterval(carouselInterval);
+    } else {
+      setCurrentTaskIndex(0);
+    }
+  }, [tasks]);
+
   /**
-   * 获取当前活跃任务的简要信息
+   * 获取当前活跃任务的简要信息（支持轮播显示）
    */
   const getActiveTaskSummary = () => {
-    if (tasks.length === 0) {
-      return null;
-    }
-    
     const downloadingTasks = tasks.filter(task => task.status === 'downloading');
     const pendingTasks = tasks.filter(task => task.status === 'pending');
     
-    if (downloadingTasks.length > 0) {
-      const task = downloadingTasks[0];
+    if (downloadingTasks.length === 0 && pendingTasks.length === 0) {
       return {
-        text: `正在导出 ${task.downloadedFiles}/${task.totalFiles}`,
-        progress: task.progress,
+        text: '查看任务列表',
+        count: 0,
+        hasActiveTasks: false,
+        isCarousel: false,
+        status: 'idle'
+      };
+    }
+    
+    // 如果有多个下载任务，轮播显示单个任务进度
+    if (downloadingTasks.length > 1) {
+      const currentTask = downloadingTasks[currentTaskIndex] || downloadingTasks[0];
+      const progress = currentTask.totalFiles > 0 ? Math.round((currentTask.downloadedFiles / currentTask.totalFiles) * 100) : 0;
+      const text = `[${currentTaskIndex + 1}/${downloadingTasks.length}] ${progress}%`;
+      
+      return {
+        text,
+        count: downloadingTasks.length + pendingTasks.length,
+        hasActiveTasks: true,
+        isCarousel: true,
+        currentIndex: currentTaskIndex + 1,
+        totalTasks: downloadingTasks.length,
         status: 'downloading'
       };
     }
     
-    if (pendingTasks.length > 0) {
-      return {
-        text: `等待导出 ${pendingTasks.length} 个任务`,
-        progress: 0,
-        status: 'pending'
-      };
+    // 单个下载任务或只有等待任务
+    let text = '';
+    let totalCount = 0;
+    let status = 'idle';
+    
+    if (downloadingTasks.length === 1) {
+      const task = downloadingTasks[0];
+      const progress = task.totalFiles > 0 ? Math.round((task.downloadedFiles / task.totalFiles) * 100) : 0;
+      text = `[1/1] ${progress}%`;
+      totalCount += 1;
+      status = 'downloading';
     }
     
-    return null;
+    if (pendingTasks.length > 0) {
+      if (text) {
+        text += ` +${pendingTasks.length}等待`;
+      } else {
+        text = `${pendingTasks.length}个任务等待中`;
+        status = 'pending';
+      }
+      totalCount += pendingTasks.length;
+    }
+    
+    return {
+      text,
+      count: totalCount,
+      hasActiveTasks: true,
+      isCarousel: false,
+      status
+    };
   };
 
   const activeTaskSummary = getActiveTaskSummary();
@@ -646,31 +708,31 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
     <div style={{ padding: '24px' }}>
       
       <Card 
-        title="" 
-        extra={
-          <Space>
-            {activeTaskSummary && (
-              <Button 
-                type="link" 
-                onClick={onViewTasks}
-                style={{ padding: '4px 8px', fontSize: '12px' }}
-              >
-                <Badge 
-                  status={activeTaskSummary.status === 'downloading' ? 'processing' : 'default'} 
-                  text={activeTaskSummary.text}
-                />
-              </Button>
-            )}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Button 
-              type="primary" 
-              icon={<DownloadOutlined />}
-              disabled={!selectedKeys.length || creating}
-              loading={creating}
-              onClick={handleExport}
+              type="text"
+              onClick={onViewTasks}
+              style={{ 
+                padding: '4px 8px', 
+                fontSize: '13px',
+                color: activeTaskSummary.hasActiveTasks ? '#1890ff' : '#666'
+              }}
             >
-              {creating ? '正在导出...' : '导出'}
+              {activeTaskSummary.text}
             </Button>
-          </Space>
+          </div>
+        } 
+        extra={
+          <Button 
+            type="primary" 
+            icon={<DownloadOutlined />}
+            disabled={!selectedKeys.length || creating}
+            loading={creating}
+            onClick={handleExport}
+          >
+            {creating ? '正在导出...' : '导出'}
+          </Button>
         }
       >
         <Spin spinning={loading}>
