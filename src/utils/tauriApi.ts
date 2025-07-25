@@ -131,7 +131,7 @@ export class TauriApi {
    * @param task 下载任务信息
    */
   async createDownloadTask(task: Omit<DownloadTask, 'id' | 'createdAt' | 'updatedAt'>): Promise<DownloadTask> {
-    return await invoke('create_download_task', { task });
+    return await invoke('create_download_task', { taskRequest: task });
   }
 
   /**

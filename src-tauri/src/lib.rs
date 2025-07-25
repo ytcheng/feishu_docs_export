@@ -102,6 +102,27 @@ struct DownloadTask {
     source_id: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct CreateDownloadTaskRequest {
+    name: String,
+    description: Option<String>,
+    status: String,
+    progress: f64,
+    #[serde(rename = "totalFiles")]
+    total_files: i32,
+    #[serde(rename = "downloadedFiles")]
+    downloaded_files: i32,
+    #[serde(rename = "failedFiles")]
+    failed_files: i32,
+    #[serde(rename = "outputPath")]
+    output_path: String,
+    #[serde(rename = "sourceType")]
+    source_type: String,
+    #[serde(rename = "sourceId")]
+    source_id: Option<String>,
+    files: Option<serde_json::Value>,
+}
+
 // 应用状态
 struct AppState {
     http_client: Client,
@@ -288,26 +309,27 @@ async fn get_wiki_spaces(
 
 /**
  * 获取知识库空间节点
+ * 根据飞书API文档: https://open.feishu.cn/document/server-docs/docs/wiki-v2/space-node/list
  */
 #[tauri::command]
 async fn get_wiki_space_nodes(
     access_token: String,
-    space_id: Option<String>,
-    parent_token: Option<String>,
+    space_id: String,
+    parent_node_token: Option<String>,
     state: State<'_, AppState>
 ) -> Result<ApiResponse<serde_json::Value>, String> {
     let client = &state.http_client;
     
+    // 构建正确的API端点
+    let url = format!("https://open.feishu.cn/open-apis/wiki/v2/spaces/{}/nodes", space_id);
+    
     let mut query_params = vec![];
-    if let Some(id) = space_id {
-        query_params.push(("space_id", id));
-    }
-    if let Some(token) = parent_token {
+    if let Some(token) = parent_node_token {
         query_params.push(("parent_node_token", token));
     }
     
     let response = client
-        .get("https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node")
+        .get(&url)
         .header("Authorization", format!("Bearer {}", access_token))
         .query(&query_params)
         .send()
@@ -327,15 +349,28 @@ async fn get_wiki_space_nodes(
  */
 #[tauri::command]
 async fn create_download_task(
-    task: DownloadTask,
+    task_request: CreateDownloadTaskRequest,
     state: State<'_, AppState>
 ) -> Result<DownloadTask, String> {
     let mut tasks = state.download_tasks.lock().unwrap();
     let task_id = uuid::Uuid::new_v4().to_string();
-    let mut new_task = task;
-    new_task.id = task_id.clone();
-    new_task.created_at = chrono::Utc::now().to_rfc3339();
-    new_task.updated_at = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now().to_rfc3339();
+    
+    let new_task = DownloadTask {
+        id: task_id.clone(),
+        name: task_request.name,
+        description: task_request.description,
+        status: task_request.status,
+        progress: task_request.progress,
+        total_files: task_request.total_files,
+        downloaded_files: task_request.downloaded_files,
+        failed_files: task_request.failed_files,
+        output_path: task_request.output_path,
+        created_at: now.clone(),
+        updated_at: now,
+        source_type: task_request.source_type,
+        source_id: task_request.source_id,
+    };
     
     tasks.insert(task_id, new_task.clone());
     Ok(new_task)
