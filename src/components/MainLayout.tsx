@@ -32,28 +32,30 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, onMenuChange, selecte
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={180} style={{ background: '#fff', borderRight: '1px solid #eee' }}>
+    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
+      <Sider width={180} style={{ background: '#fff', borderRight: '1px solid #eee', overflow: 'hidden' }}>
         <div style={{ height: 48, textAlign: 'center', lineHeight: '48px', fontWeight: 'bold', fontSize: 16 }}>飞书文档导出助手</div>
         <Menu
           mode="inline"
           selectedKeys={[selectedMenu]}
           onClick={({ key }) => onMenuChange(key as string)}
-          style={{ borderRight: 0 }}
+          style={{ borderRight: 0, height: 'calc(100vh - 48px)', overflow: 'auto' }}
           items={[
             { key: 'new', icon: <FileAddOutlined />, label: '新建下载任务' },
             { key: 'list', icon: <UnorderedListOutlined />, label: '下载任务列表' },
           ]}
         />
       </Sider>
-      <Layout>
+      <Layout style={{ overflow: 'hidden' }}>
         <Header style={{ 
           background: '#fff', 
           borderBottom: '1px solid #eee', 
           padding: '0 24px',
           display: 'flex',
           justifyContent: 'flex-end',
-          alignItems: 'center'
+          alignItems: 'center',
+          height: 64,
+          flexShrink: 0
         }}>
           {userInfo && (
             <Dropdown
@@ -72,7 +74,20 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, onMenuChange, selecte
             </Dropdown>
           )}
         </Header>
-        <Content style={{ margin: 24, minHeight: 360 }}>{children}</Content>
+        <Content style={{ 
+          margin: 0, 
+          height: 'calc(100vh - 64px)', 
+          overflow: 'hidden',
+          padding: 0
+        }}>
+          <div className="content-scroll" style={{ 
+             padding: 24, 
+             height: '100%', 
+             overflow: 'auto'
+           }}>
+            {children}
+          </div>
+        </Content>
       </Layout>
     </Layout>
   );

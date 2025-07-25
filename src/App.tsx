@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import MainLayout from './components/MainLayout';
 import { UserInfo } from './types';
 import { tauriApi } from './utils/tauriApi';
+import './App.css';
 
 const App: React.FC = () => {
   const [authed, setAuthed] = useState(false);
