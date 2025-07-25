@@ -657,7 +657,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
     if (downloadingTasks.length > 1) {
       const currentTask = downloadingTasks[currentTaskIndex] || downloadingTasks[0];
       const progress = currentTask.totalFiles > 0 ? Math.round((currentTask.downloadedFiles / currentTask.totalFiles) * 100) : 0;
-      const text = `[${currentTaskIndex + 1}/${downloadingTasks.length}] ${progress}%`;
+        const text = `正在导出...  [${currentTaskIndex + 1}/${downloadingTasks.length}] ${progress}%`;
       
       return {
         text,
