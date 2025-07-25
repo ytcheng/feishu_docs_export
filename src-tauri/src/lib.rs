@@ -3,9 +3,6 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::State;
 use reqwest::Client;
-// use base64::{Engine as _, engine::general_purpose};
-use tauri_plugin_oauth::{OauthConfig, start_with_config};
-use tauri::{Window,Emitter};
 use url::Url;
 
 
@@ -191,22 +188,29 @@ async fn get_user_info(access_token: String, state: State<'_, AppState>) -> Resu
     Ok(result)
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct RootFolderMeta {
+    token: String,
+    id: String,
+    user_id: String,
+}
+
 /**
  * 获取根文件夹元数据
+ * 根据飞书API文档: https://open.feishu.cn/document/server-docs/docs/drive-v1/folder/get-root-folder-meta
  */
 #[tauri::command]
-async fn get_root_folder_meta(access_token: String, state: State<'_, AppState>) -> Result<ApiResponse<FeishuFolder>, String> {
+async fn get_root_folder_meta(access_token: String, state: State<'_, AppState>) -> Result<ApiResponse<RootFolderMeta>, String> {
     let client = &state.http_client;
     
     let response = client
-        .get("https://open.feishu.cn/open-apis/drive/v1/metas/batch_query")
+        .get("https://open.feishu.cn/open-apis/drive/explorer/v2/root_folder/meta")
         .header("Authorization", format!("Bearer {}", access_token))
-        .query(&[("request_docs", "[{\"doc_token\":\"\",\"doc_type\":\"folder\"}]")])
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;
     
-    let result: ApiResponse<FeishuFolder> = response
+    let result: ApiResponse<RootFolderMeta> = response
         .json()
         .await
         .map_err(|e| format!("解析响应失败: {}", e))?;
