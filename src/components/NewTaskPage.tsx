@@ -331,13 +331,29 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
    */
   const handleSelectDirectory = async () => {
     try {
+      console.log('开始选择目录...');
       const selectedPath = await tauriApi.selectDirectory();
+      console.log('选择的目录:', selectedPath);
       if (selectedPath) {
         setSavePath(selectedPath);
+        message.success(`已选择目录: ${selectedPath}`);
+      } else {
+        console.log('用户取消了目录选择');
       }
     } catch (error) {
       console.error('选择目录失败:', error);
-      message.error('选择目录失败');
+      // 提供更详细的错误信息
+      let errorMessage = '选择目录失败';
+      if (error && typeof error === 'object') {
+        if ('message' in error) {
+          errorMessage = `选择目录失败: ${error.message}`;
+        } else if ('toString' in error) {
+          errorMessage = `选择目录失败: ${error.toString()}`;
+        }
+      } else if (typeof error === 'string') {
+        errorMessage = `选择目录失败: ${error}`;
+      }
+      message.error(errorMessage);
     }
   };
 
