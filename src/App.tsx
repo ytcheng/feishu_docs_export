@@ -139,7 +139,10 @@ const App: React.FC = () => {
         )}
       </Header>
       <Content style={{ margin: 24, height: 'calc(100vh - 112px)', overflow: 'hidden' }}>
-        {currentPage === 'new' && <NewTaskPage onTaskCreated={() => setCurrentPage('list')} />}
+        {currentPage === 'new' && <NewTaskPage onTaskCreated={() => {
+          console.log('app.tsx onTaskCreated');
+          setCurrentPage('list');
+        }} />}
         {currentPage === 'list' && <TaskListPage onNewTask={() => setCurrentPage('new')} />}
       </Content>
     </Layout>

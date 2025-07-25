@@ -131,14 +131,48 @@ export class TauriApi {
    * @param task 下载任务信息
    */
   async createDownloadTask(task: Omit<DownloadTask, 'id' | 'createdAt' | 'updatedAt'>): Promise<DownloadTask> {
-    return await invoke('create_download_task', { taskRequest: task });
+    const result = await invoke('create_download_task', { taskRequest: task }) as any;
+    // 转换 Rust 的 snake_case 字段名为 TypeScript 的 camelCase
+    return {
+      id: result.id,
+      name: result.name,
+      description: result.description,
+      status: result.status,
+      progress: result.progress,
+      totalFiles: result.total_files,
+      downloadedFiles: result.downloaded_files,
+      failedFiles: result.failed_files,
+      outputPath: result.output_path,
+      createdAt: result.created_at,
+      updatedAt: result.updated_at,
+      sourceType: result.source_type,
+      sourceId: result.source_id,
+      files: result.files
+    };
   }
 
   /**
    * 获取下载任务列表
    */
   async getDownloadTasks(): Promise<DownloadTask[]> {
-    return await invoke('get_download_tasks');
+    const tasks = await invoke('get_download_tasks') as any[];
+    // 转换 Rust 的 snake_case 字段名为 TypeScript 的 camelCase
+    return tasks.map((task: any) => ({
+      id: task.id,
+      name: task.name,
+      description: task.description,
+      status: task.status,
+      progress: task.progress,
+      totalFiles: task.total_files,
+      downloadedFiles: task.downloaded_files,
+      failedFiles: task.failed_files,
+      outputPath: task.output_path,
+      createdAt: task.created_at,
+      updatedAt: task.updated_at,
+      sourceType: task.source_type,
+      sourceId: task.source_id,
+      files: task.files
+    }));
   }
 
   /**
@@ -147,7 +181,25 @@ export class TauriApi {
    * @param updates 更新内容
    */
   async updateDownloadTask(id: string, updates: Partial<DownloadTask>): Promise<boolean> {
-    return await invoke('update_download_task', { id, updates });
+    // 转换 TypeScript 的 camelCase 字段名为 Rust 的 snake_case
+    const rustUpdates: any = {};
+    if (updates.totalFiles !== undefined) rustUpdates.total_files = updates.totalFiles;
+    if (updates.downloadedFiles !== undefined) rustUpdates.downloaded_files = updates.downloadedFiles;
+    if (updates.failedFiles !== undefined) rustUpdates.failed_files = updates.failedFiles;
+    if (updates.outputPath !== undefined) rustUpdates.output_path = updates.outputPath;
+    if (updates.createdAt !== undefined) rustUpdates.created_at = updates.createdAt;
+    if (updates.updatedAt !== undefined) rustUpdates.updated_at = updates.updatedAt;
+    if (updates.sourceType !== undefined) rustUpdates.source_type = updates.sourceType;
+    if (updates.sourceId !== undefined) rustUpdates.source_id = updates.sourceId;
+    
+    // 复制其他字段
+    if (updates.name !== undefined) rustUpdates.name = updates.name;
+    if (updates.description !== undefined) rustUpdates.description = updates.description;
+    if (updates.status !== undefined) rustUpdates.status = updates.status;
+    if (updates.progress !== undefined) rustUpdates.progress = updates.progress;
+    if (updates.files !== undefined) rustUpdates.files = updates.files;
+    
+    return await invoke('update_download_task', { id, updates: rustUpdates });
   }
 
   /**

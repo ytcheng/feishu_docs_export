@@ -83,6 +83,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
     setLoading(true);
     try {
       const taskList = await tauriApi.getDownloadTasks();
+      console.log("loadTasks", taskList);
       setTasks(taskList);
     } catch (error) {
       console.error('获取下载任务列表失败:', error);
@@ -158,6 +159,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
    * 组件挂载时加载数据
    */
   useEffect(() => {
+    console.log("TaskListPage useEffect");
     loadTasks();
     
     // 监听下载进度更新

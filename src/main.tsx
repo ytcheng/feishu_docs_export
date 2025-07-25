@@ -1,14 +1,19 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App"; 
-import { listen } from '@tauri-apps/api/event';
+import App from "./App";
 
-// 监听 Rust 端发过来的事件
-listen('auth_callback', (event) => {
-  console.log('收到来自 Rust 的事件:', event.payload);
-});
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+/**
+ * 初始化应用
+ * 在 Tauri 环境中等待 API 初始化完成后再设置事件监听器
+ */
+async function initApp() {
+  // 渲染 React 应用
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}
+
+// 启动应用
+initApp();
