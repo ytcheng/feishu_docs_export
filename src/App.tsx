@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Layout, Avatar, Dropdown, Typography, Space } from 'antd';
 import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import AuthPage from './components/AuthPage';
-import NewTaskPage from './components/NewTaskPage';
+import HomePage from './components/HomePage';
 import TaskListPage from './components/TaskListPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { UserInfo } from './types';
@@ -16,7 +16,7 @@ const App: React.FC = () => {
   const [authed, setAuthed] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  const [currentPage, setCurrentPage] = useState<'new' | 'list'>('list');
+  const [currentPage, setCurrentPage] = useState<'home' | 'list'>('home');
 
   /**
    * 处理授权成功回调
@@ -159,12 +159,9 @@ const App: React.FC = () => {
           </Dropdown>
         )}
       </Header>
-      <Content style={{ margin: 24, height: 'calc(100vh - 112px)', overflow: 'hidden' }}>
-        {currentPage === 'new' && <NewTaskPage onTaskCreated={() => {
-          console.log('app.tsx onTaskCreated');
-          setCurrentPage('list');
-        }} />}
-        {currentPage === 'list' && <TaskListPage onNewTask={() => setCurrentPage('new')} />}
+      <Content style={{ height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
+        {currentPage === 'home' && <HomePage onViewTasks={() => setCurrentPage('list')} />}
+        {currentPage === 'list' && <TaskListPage onGoBack={() => setCurrentPage('home')} />}
       </Content>
     </Layout>
   );

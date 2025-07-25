@@ -23,3 +23,4 @@ dist-ssr
 *.sln
 *.sw?
 feishu-export
+src-tauri/.data/feishu_export.db

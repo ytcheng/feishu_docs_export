@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Progress, Space, Button, Tag, message, Popconfirm, Typography, Spin, Tooltip } from 'antd';
-import { DownloadOutlined, DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
+import { DownloadOutlined, DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, ArrowLeftOutlined, StopOutlined } from '@ant-design/icons';
 import { DownloadTask, DownloadFile } from '../types';
 import { tauriApi } from '../utils/tauriApi';
 
 const { Text } = Typography;
 
 interface TaskListPageProps {
-  onNewTask?: () => void;
+  onGoBack?: () => void;
 }
 
 /**
  * 下载任务列表页面组件
  */
-const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
+const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
@@ -534,22 +534,12 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
       <Card 
         title="下载任务列表" 
         extra={
-          <Space>
-            <Button 
-              icon={<PlusOutlined />} 
-              type="primary"
-              onClick={onNewTask}
-            >
-              新导出
-            </Button>
-            <Button 
-              icon={<ReloadOutlined />} 
-              onClick={loadTasks}
-              loading={loading}
-            >
-              刷新
-            </Button>
-          </Space>
+          <Button 
+            icon={<ArrowLeftOutlined />} 
+            onClick={onGoBack}
+          >
+            返回首页
+          </Button>
         }
       >
         <Spin spinning={loading}>
