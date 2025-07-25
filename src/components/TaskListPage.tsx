@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Progress, Space, Button, Tag, message, Popconfirm, Typography, Spin, Tooltip } from 'antd';
-import { DownloadOutlined, DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, PlusOutlined } from '@ant-design/icons';
+import { DownloadOutlined, DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, PlusOutlined, StopOutlined } from '@ant-design/icons';
 import { DownloadTask, DownloadFile } from '../types';
 import { tauriApi } from '../utils/tauriApi';
 
@@ -18,63 +18,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
   const [loading, setLoading] = useState(false);
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
 
-  /**
-   * 获取任务状态对应的标签颜色
-   */
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'orange';
-      case 'downloading':
-        return 'blue';
-      case 'completed':
-        return 'green';
-      case 'failed':
-        return 'red';
-      case 'paused':
-        return 'default';
-      default:
-        return 'default';
-    }
-  };
 
-  /**
-   * 获取任务状态的中文显示
-   */
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return '等待中';
-      case 'downloading':
-        return '下载中';
-      case 'completed':
-        return '已完成';
-      case 'failed':
-        return '失败';
-      case 'paused':
-        return '已暂停';
-      default:
-        return status;
-    }
-  };
-
-  /**
-   * 获取文件状态的中文显示
-   */
-  const getFileStatusText = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return '等待中';
-      case 'downloading':
-        return '下载中';
-      case 'completed':
-        return '已完成';
-      case 'failed':
-        return '失败';
-      default:
-        return status;
-    }
-  };
 
   /**
    * 加载下载任务列表
@@ -142,6 +86,21 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
   };
 
   /**
+   * 停止下载任务
+   */
+  const handleStopDownload = async (taskId: string) => {
+    try {
+      message.info('正在停止下载任务...');
+      await tauriApi.stopDownloadTask(taskId);
+      message.success('下载任务已停止');
+      loadTasks(); // 重新加载任务列表
+    } catch (error) {
+      console.error('停止下载失败:', error);
+      message.error('停止下载失败');
+    }
+  };
+
+  /**
    * 自动恢复下载任务
    */
   const handleAutoResumeDownloadTasks = async () => {
@@ -162,10 +121,12 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
     console.log("TaskListPage useEffect");
     loadTasks();
     
+    let unlistenFunctions: (() => void)[] = [];
+    
     // 监听下载进度更新
     const handleDownloadProgress = (data: any) => {
       console.log('下载进度更新:', data);
-      message.info(`正在下载: ${data.currentFile} (${data.completedFiles}/${data.totalFiles})`);
+      message.info(`正在下载: ${data.current_file} (${data.completed_files}/${data.total_files})`);
       loadTasks(); // 重新加载任务列表以更新进度
     };
     
@@ -216,11 +177,27 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
     };
     
     // 注册事件监听器
-    tauriApi.onDownloadProgress(handleDownloadProgress);
-    tauriApi.onDownloadComplete(handleDownloadComplete);
-    tauriApi.onDownloadError(handleDownloadError);
-    tauriApi.onDownloadFileError(handleDownloadFileError);
-    tauriApi.onAutoResumeTask(handleAutoResumeTask);
+    const setupListeners = async () => {
+      try {
+        const unlistenProgress = await tauriApi.onDownloadProgress(handleDownloadProgress);
+        const unlistenComplete = await tauriApi.onDownloadComplete(handleDownloadComplete);
+        const unlistenError = await tauriApi.onDownloadError(handleDownloadError);
+        const unlistenFileError = await tauriApi.onDownloadFileError(handleDownloadFileError);
+        const unlistenAutoResume = await tauriApi.onAutoResumeTask(handleAutoResumeTask);
+        
+        unlistenFunctions = [
+          unlistenProgress,
+          unlistenComplete,
+          unlistenError,
+          unlistenFileError,
+          unlistenAutoResume
+        ];
+      } catch (error) {
+        console.error('设置事件监听器失败:', error);
+      }
+    };
+    
+    setupListeners();
     
     // 设置定时器定期更新任务状态
     const interval = setInterval(() => {
@@ -230,7 +207,13 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
     return () => {
       clearInterval(interval);
       // 清理事件监听器
-      tauriApi.removeDownloadListeners();
+      unlistenFunctions.forEach(unlisten => {
+        try {
+          unlisten();
+        } catch (error) {
+          console.error('清理事件监听器失败:', error);
+        }
+      });
     };
   }, []);
 
@@ -293,9 +276,18 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
        dataIndex: 'status',
        key: 'status',
        width: '8%',
-       render: (status: string) => (
-         <Tag color={getStatusColor(status)}>{getStatusText(status)}</Tag>
-       ),
+       render: (status: string) => {
+         const statusConfig = {
+           pending: { color: 'default', text: '待下载' },
+           downloading: { color: 'processing', text: '下载中' },
+           completed: { color: 'success', text: '已完成' },
+           failed: { color: 'error', text: '失败' },
+           paused: { color: 'warning', text: '已暂停' },
+           cancelled: { color: 'default', text: '已取消' },
+         };
+         const config = statusConfig[status as keyof typeof statusConfig] || { color: 'default', text: status };
+         return <Tag color={config.color}>{config.text}</Tag>;
+       },
      },
      {
         title: '操作',
@@ -312,14 +304,15 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
                 title="开始下载"
               />
             )}
-                   {record.status === 'running' && (
+            {record.status === 'downloading' && (
               <Button
+                icon={<StopOutlined />}
                 size="small"
                 type="default"
-                disabled
-                title="下载中..."
+                onClick={() => handleStopDownload(record.id)}
+                title="停止下载"
               >
-                下载中
+                停止
               </Button>
             )}
             {(record.status === 'completed' || record.status === 'failed') && hasFailedFiles(record) && (
@@ -370,6 +363,17 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
       dataIndex: 'type',
       key: 'type',
       width: '10%',
+      render: (type: string) => {
+        const typeMap: { [key: string]: string } = {
+          'file': '文件',
+          'doc': '文档',
+          'docx': '文档',
+          'sheet': '表格',
+          'bitable': '多维表格',
+          'folder': '文件夹'
+        };
+        return typeMap[type] || type;
+      },
     },
     {
       title: '相对路径',
@@ -388,16 +392,24 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
        key: 'status',
        width: '15%',
        render: (status: string, record: DownloadFile) => {
+         const fileStatusConfig = {
+           pending: { color: 'orange', text: '等待中' },
+           downloading: { color: 'blue', text: '下载中' },
+           completed: { color: 'green', text: '已完成' },
+           failed: { color: 'red', text: '失败' },
+         };
+         const config = fileStatusConfig[status as keyof typeof fileStatusConfig] || { color: 'default', text: status };
          const statusTag = (
-           <Tag color={getStatusColor(status)}>
-             {getFileStatusText(status)}
+           <Tag color={config.color}>
+             {config.text}
            </Tag>
          );
          
          // 如果状态是失败且有错误信息，显示鼠标悬停提示
          if (status === 'failed' && (record as any).errorMessage) {
            return (
-             <Tooltip title={(record as any).errorMessage} placement="top">               {statusTag}
+             <Tooltip title={(record as any).errorMessage} placement="top">
+               {statusTag}
              </Tooltip>
            );
          }

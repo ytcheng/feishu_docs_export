@@ -1,6 +1,18 @@
 /**
- * 用户信息接口
+ * 下载进度事件
  */
+export interface DownloadProgressEvent {
+  task_id: string;
+  progress: number;
+  completed_files: number;
+  total_files: number;
+  current_file: string;
+  status: string;
+}
+
+/**
+  * 用户信息接口
+  */
 export interface UserInfo {
   name: string;
   avatar_url?: string;
@@ -12,7 +24,7 @@ export interface UserInfo {
 /**
  * 下载任务状态
  */
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'paused';
+export type TaskStatus = 'pending' | 'downloading' | 'completed' | 'failed' | 'paused' | 'cancelled';
 
 /**
  * 下载任务接口
@@ -46,6 +58,8 @@ export interface DownloadFile {
   progress: number;
   localPath?: string;
   error?: string;
+  relativePath?: string;
+  spaceId?: string;
 }
 
 /**
@@ -123,15 +137,7 @@ export interface TokenInfo {
 }
 
 /**
- * 下载进度事件
- */
-export interface DownloadProgressEvent {
-  taskId: string;
-  fileToken?: string;
-  progress: number;
-  status: string;
-  message?: string;
-}
+ * 
 
 /**
  * 下载完成事件

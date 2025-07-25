@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { open as openPath } from '@tauri-apps/plugin-shell';
 import { fetch } from '@tauri-apps/plugin-http';
@@ -21,7 +22,7 @@ import type {
  */
 export class TauriApi {
   private static instance: TauriApi;
-  private downloadListeners: Map<string, Function[]> = new Map();
+  private tokenExpiredUnlisten: (() => void) | null = null;
 
   private constructor() {}
 
@@ -220,6 +221,14 @@ export class TauriApi {
   }
 
   /**
+   * 停止下载任务
+   * @param taskId 任务ID
+   */
+  async stopDownloadTask(taskId: string): Promise<boolean> {
+    return await invoke('stop_download_task', { taskId });
+  }
+
+  /**
    * 重试下载文件
    * @param taskId 任务ID
    * @param fileToken 文件令牌
@@ -240,106 +249,93 @@ export class TauriApi {
    * 监听下载进度
    * @param callback 回调函数
    */
-  onDownloadProgress(callback: (data: DownloadProgressEvent) => void): void {
-    this.addEventListener('download-progress', callback);
+  async onDownloadProgress(callback: (data: DownloadProgressEvent) => void): Promise<() => void> {
+    const unlisten = await listen('download-progress', (event) => {
+      callback(event.payload as DownloadProgressEvent);
+    });
+    return unlisten;
   }
 
   /**
    * 监听下载完成
    * @param callback 回调函数
    */
-  onDownloadComplete(callback: (data: DownloadCompleteEvent) => void): void {
-    this.addEventListener('download-complete', callback);
+  async onDownloadComplete(callback: (data: DownloadCompleteEvent) => void): Promise<() => void> {
+    const unlisten = await listen('download-complete', (event) => {
+      callback(event.payload as DownloadCompleteEvent);
+    });
+    return unlisten;
   }
 
   /**
    * 监听下载错误
    * @param callback 回调函数
    */
-  onDownloadError(callback: (data: DownloadErrorEvent) => void): void {
-    this.addEventListener('download-error', callback);
+  async onDownloadError(callback: (data: DownloadErrorEvent) => void): Promise<() => void> {
+    const unlisten = await listen('download-error', (event) => {
+      callback(event.payload as DownloadErrorEvent);
+    });
+    return unlisten;
   }
 
   /**
    * 监听下载文件错误
    * @param callback 回调函数
    */
-  onDownloadFileError(callback: (data: DownloadErrorEvent) => void): void {
-    this.addEventListener('download-file-error', callback);
+  async onDownloadFileError(callback: (data: DownloadErrorEvent) => void): Promise<() => void> {
+    const unlisten = await listen('download-file-error', (event) => {
+      callback(event.payload as DownloadErrorEvent);
+    });
+    return unlisten;
   }
 
   /**
    * 监听恢复下载任务
    * @param callback 回调函数
    */
-  onResumeDownloadTasks(callback: (data: any) => void): void {
-    this.addEventListener('resume-download-tasks', callback);
+  async onResumeDownloadTasks(callback: (data: any) => void): Promise<() => void> {
+    const unlisten = await listen('resume-download-tasks', (event) => {
+      callback(event.payload);
+    });
+    return unlisten;
   }
 
   /**
    * 监听自动恢复任务
    * @param callback 回调函数
    */
-  onAutoResumeTask(callback: (data: any) => void): void {
-    this.addEventListener('auto-resume-task', callback);
+  async onAutoResumeTask(callback: (data: any) => void): Promise<() => void> {
+    const unlisten = await listen('auto-resume-task', (event) => {
+      callback(event.payload);
+    });
+    return unlisten;
   }
 
   /**
    * 监听Token过期
    * @param callback 回调函数
    */
-  onTokenExpired(callback: () => void): void {
-    this.addEventListener('token-expired', callback);
-  }
-
-  /**
-   * 移除下载监听器
-   */
-  removeDownloadListeners(): void {
-    this.removeEventListener('download-progress');
-    this.removeEventListener('download-complete');
-    this.removeEventListener('download-error');
-    this.removeEventListener('download-file-error');
+  async onTokenExpired(callback: () => void): Promise<() => void> {
+    const unlisten = await listen('token-expired', (event) => {
+      callback();
+    });
+    this.tokenExpiredUnlisten = unlisten;
+    return unlisten;
   }
 
   /**
    * 移除Token过期监听器
    */
   removeTokenExpiredListener(): void {
-    this.removeEventListener('token-expired');
-  }
-
-  /**
-   * 添加事件监听器
-   * @param event 事件名称
-   * @param callback 回调函数
-   */
-  private addEventListener(event: string, callback: Function): void {
-    if (!this.downloadListeners.has(event)) {
-      this.downloadListeners.set(event, []);
-    }
-    this.downloadListeners.get(event)!.push(callback);
-  }
-
-  /**
-   * 移除事件监听器
-   * @param event 事件名称
-   */
-  private removeEventListener(event: string): void {
-    this.downloadListeners.delete(event);
-  }
-
-  /**
-   * 触发事件
-   * @param event 事件名称
-   * @param data 事件数据
-   */
-  private emit(event: string, data: any): void {
-    const listeners = this.downloadListeners.get(event);
-    if (listeners) {
-      listeners.forEach(callback => callback(data));
+    if (this.tokenExpiredUnlisten) {
+      this.tokenExpiredUnlisten();
+      this.tokenExpiredUnlisten = null;
     }
   }
+
+  // 注意：事件监听器现在返回取消监听的函数
+  // 使用方式：const unlisten = await tauriApi.onDownloadProgress(callback);
+  // 取消监听：unlisten();
 }
 
 // 导出单例实例
