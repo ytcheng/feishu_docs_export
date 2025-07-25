@@ -103,9 +103,9 @@ export class TauriApi {
   async getWikiSpaceNodes(
     accessToken: string,
     spaceId?: string,
-    parentToken?: string
+    parentNodeToken?: string
   ): Promise<ApiResponse<{ items: FeishuWikiNode[] }>> {
-    return await invoke('get_wiki_space_nodes', { accessToken, spaceId, parentToken });
+    return await invoke('get_wiki_space_nodes', { accessToken, spaceId, parentNodeToken });
   }
 
   /**

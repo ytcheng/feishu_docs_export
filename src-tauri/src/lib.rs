@@ -381,6 +381,7 @@ async fn get_wiki_space_nodes(
     state: State<'_, AppState>
 ) -> Result<ApiResponse<serde_json::Value>, String> {
     let client = &state.http_client;
+    println!("get_wiki_space_nodes: space_id: {}, parent_node_token: {:?}", space_id, parent_node_token);
     
     // 构建正确的API端点
     let url = format!("https://open.feishu.cn/open-apis/wiki/v2/spaces/{}/nodes", space_id);
