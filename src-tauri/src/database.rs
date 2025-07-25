@@ -1,5 +1,4 @@
 use sqlx::{sqlite::SqlitePool, Row};
-use serde_json;
 use std::path::Path;
 use crate::{DownloadTask, FileInfo};
 
