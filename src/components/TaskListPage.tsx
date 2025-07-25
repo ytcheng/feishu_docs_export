@@ -42,6 +42,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onNewTask }) => {
    */
   const handleDeleteTask = async (taskId: string) => {
     try {
+      console.log("handleDeleteTask", taskId);
       await tauriApi.deleteDownloadTask(taskId);
       message.success('任务删除成功');
       loadTasks(); // 重新加载任务列表

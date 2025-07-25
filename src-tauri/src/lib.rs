@@ -107,7 +107,7 @@ struct DownloadTask {
     created_at: String,
     updated_at: String,
     source_type: String,
-    files: Option<serde_json::Value>,
+    files: Option<Vec<FileInfo>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -126,7 +126,7 @@ struct CreateDownloadTaskRequest {
     output_path: String,
     #[serde(rename = "sourceType")]
     source_type: String,
-    files: Option<serde_json::Value>,
+    files: Vec<FileInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -430,11 +430,17 @@ async fn create_download_task(
         created_at: now.clone(),
         updated_at: now,
         source_type: task_request.source_type,
-        files: task_request.files,
+        files: Some(task_request.files.clone()),
     };
     
     state.db.create_task(&new_task).await
         .map_err(|e| format!("创建任务失败: {}", e))?;
+    
+    // 存储文件列表到download_files表
+    for file in task_request.files {
+        state.db.create_file(&task_id, &file).await
+            .map_err(|e| format!("创建任务文件失败: {}", e))?;
+    }
     
     Ok(new_task)
 }
@@ -446,6 +452,18 @@ async fn create_download_task(
 async fn get_download_tasks(state: State<'_, AppState>) -> Result<Vec<DownloadTask>, String> {
     state.db.get_all_tasks().await
         .map_err(|e| format!("获取任务列表失败: {}", e))
+}
+
+/**
+ * 获取任务的文件列表
+ */
+#[tauri::command]
+async fn get_task_files(
+    task_id: String,
+    state: State<'_, AppState>
+) -> Result<Vec<FileInfo>, String> {
+    state.db.get_task_files(&task_id).await
+        .map_err(|e| format!("获取任务文件列表失败: {}", e))
 }
 
 /**
@@ -492,9 +510,7 @@ async fn update_download_task(
     if let Some(source_type) = updates.get("source_type").and_then(|v| v.as_str()) {
         task.source_type = source_type.to_string();
     }
-    if let Some(files) = updates.get("files") {
-        task.files = Some(files.clone());
-    }
+    // files字段已移除，文件信息现在存储在download_files表中
     
     task.updated_at = chrono::Utc::now().to_rfc3339();
     
@@ -509,10 +525,10 @@ async fn update_download_task(
  */
 #[tauri::command]
 async fn delete_download_task(
-    task_id: String,
+    id: String,
     state: State<'_, AppState>
 ) -> Result<bool, String> {
-    state.db.delete_task(&task_id).await
+    state.db.delete_task(&id).await
         .map_err(|e| format!("删除任务失败: {}", e))?;
     Ok(true)
 }
@@ -706,17 +722,19 @@ async fn download_file_to_path(
     Ok(())
 }
 
+
+
 /**
- * 执行下载任务
+ * 支持断点续传的下载任务内部实现函数
  */
-#[tauri::command]
-async fn execute_download_task(
-    task_id: String,
+async fn start_download_task_with_resume(
+    task: DownloadTask,
     access_token: String,
     app_handle: AppHandle,
-    state: State<'_, AppState>
-) -> Result<bool, String> {
-    println!("开始执行下载任务: {}", task_id);
+    state: State<'_, AppState>,
+    _is_resume: bool  // 参数保留但不再使用，逻辑已统一
+) -> Result<(), String> {
+    let task_id = task.id.clone();
     
     // 检查任务是否已经在运行
     {
@@ -726,18 +744,34 @@ async fn execute_download_task(
         }
     }
     
-    // 获取任务信息
-    let task = state.db.get_task(&task_id).await
-        .map_err(|e| format!("获取任务失败: {}", e))?
-        .ok_or_else(|| format!("任务 {} 不存在", task_id))?;
+    // 从download_files表获取文件列表
+    let files = state.db.get_task_files(&task_id).await
+        .map_err(|e| format!("获取任务文件列表失败: {}", e))?;
     
-    // 解析文件列表
-    let files: Vec<FileInfo> = if let Some(files_value) = &task.files {
-        serde_json::from_value(files_value.clone())
-            .map_err(|e| format!("解析文件列表失败: {}", e))?
-    } else {
-        return Err("任务中没有文件列表".to_string());
-    };
+    if files.is_empty() {
+        return Err("任务中没有文件".to_string());
+    }
+    
+    // 统计当前状态
+    let completed_files = state.db.get_file_count_by_status(&task_id, "completed").await
+        .map_err(|e| format!("获取已完成文件数量失败: {}", e))? as i32;
+    let failed_files = state.db.get_file_count_by_status(&task_id, "failed").await
+        .map_err(|e| format!("获取失败文件数量失败: {}", e))? as i32;
+    
+    println!("开始下载任务: {}, 总文件: {}, 已完成: {}, 失败: {}", 
+             task_id, files.len(), completed_files, failed_files);
+    
+    // 创建文件状态列表用于前端显示
+    let mut files_with_status: Vec<serde_json::Value> = files.iter().map(|file| {
+        serde_json::json!({
+            "token": file.token,
+            "name": file.name,
+            "type": file.file_type,
+            "relativePath": file.relative_path,
+            "spaceId": file.space_id,
+            "status": file.status
+        })
+    }).collect();
     
     // 克隆必要的数据用于异步任务
     let task_id_clone = task_id.clone();
@@ -753,45 +787,50 @@ async fn execute_download_task(
         let mut completed_files = 0;
         let mut failed_files = 0;
         
+        // 统计已完成和失败的文件数量（从数据库状态获取）
+        for file_status in &files_with_status {
+            if let Some(status) = file_status["status"].as_str() {
+                match status {
+                    "completed" => completed_files += 1,
+                    "failed" => failed_files += 1,
+                    _ => {}
+                }
+            }
+        }
+        if completed_files > 0 || failed_files > 0 {
+            println!("任务状态：已完成 {} 个文件，失败 {} 个文件", completed_files, failed_files);
+        }
+        
         // 更新任务状态为下载中
         let _ = db.update_task_status(&task_id_clone, "downloading").await;
-        let _ = db.update_task_progress(&task_id_clone, 0.0, 0, 0).await;
+        let current_progress = if total_files > 0 { (completed_files as f64 / total_files as f64) * 100.0 } else { 0.0 };
+        let _ = db.update_task_progress(&task_id_clone, current_progress, completed_files, failed_files).await;
         
         // 发送初始进度事件
         let _ = app_handle.emit("download-progress", DownloadProgress {
             task_id: task_id_clone.clone(),
-            progress: 0.0,
-            completed_files: 0,
+            progress: current_progress,
+            completed_files,
             total_files,
-            current_file: "开始下载...".to_string(),
+            current_file: if completed_files > 0 { "恢复下载..." } else { "开始下载..." }.to_string(),
             status: "downloading".to_string(),
         });
         
-        // 创建可变的文件列表副本用于更新状态
-        let mut files_with_status: Vec<serde_json::Value> = files.iter().map(|file| {
-            serde_json::json!({
-                "token": file.token,
-                "name": file.name,
-                "type": file.file_type,
-                "relativePath": file.relative_path,
-                "spaceId": file.space_id,
-                "status": "pending"
-            })
-        }).collect();
-        
         // 逐个处理文件
         for (index, file) in files.iter().enumerate() {
+            // 检查文件是否已经完成
+            if let Some(status) = files_with_status[index]["status"].as_str() {
+                if status == "completed" {
+                    println!("跳过已完成的文件: {}", file.name);
+                    continue;
+                }
+            }
+            
             println!("开始处理文件: {}, type: {}", file.name, file.file_type);
             
             // 更新当前文件状态为下载中
             files_with_status[index]["status"] = serde_json::Value::String("downloading".to_string());
-            
-            // 更新任务中的文件列表
-            if let Ok(Some(mut task)) = db.get_task(&task_id_clone).await {
-                task.files = Some(serde_json::Value::Array(files_with_status.clone()));
-                task.updated_at = chrono::Utc::now().to_rfc3339();
-                let _ = db.update_task(&task).await;
-            }
+            let _ = db.update_file_status(&task_id_clone, &file.token, "downloading", None).await;
             
             // 发送当前文件进度
             let _ = app_handle.emit("download-progress", DownloadProgress {
@@ -855,26 +894,21 @@ async fn execute_download_task(
                 Ok(_) => {
                     completed_files += 1;
                     files_with_status[index]["status"] = serde_json::Value::String("completed".to_string());
+                    let _ = db.update_file_status(&task_id_clone, &file.token, "completed", None).await;
                     println!("文件下载完成: {}", file.name);
                 }
                 Err(e) => {
                     failed_files += 1;
                     files_with_status[index]["status"] = serde_json::Value::String("failed".to_string());
                     files_with_status[index]["errorMessage"] = serde_json::Value::String(e.clone());
+                    let _ = db.update_file_status(&task_id_clone, &file.token, "failed", Some(&e)).await;
                     println!("文件下载失败: {}, 错误: {}", file.name, e);
                 }
             }
             
-            // 更新任务进度和文件列表
+            // 更新任务进度
             let progress = (completed_files as f64 / total_files as f64) * 100.0;
             let _ = db.update_task_progress(&task_id_clone, progress, completed_files, failed_files).await;
-            
-            // 更新文件列表
-            if let Ok(Some(mut task)) = db.get_task(&task_id_clone).await {
-                task.files = Some(serde_json::Value::Array(files_with_status.clone()));
-                task.updated_at = chrono::Utc::now().to_rfc3339();
-                let _ = db.update_task(&task).await;
-            }
             
             // 发送进度更新事件
             let _ = app_handle.emit("download-progress", DownloadProgress {
@@ -899,13 +933,6 @@ async fn execute_download_task(
         // 更新最终任务状态
         let _ = db.update_task_status(&task_id_clone, final_status).await;
         let _ = db.update_task_progress(&task_id_clone, 100.0, completed_files, failed_files).await;
-        
-        // 更新最终文件列表
-        if let Ok(Some(mut task)) = db.get_task(&task_id_clone).await {
-            task.files = Some(serde_json::Value::Array(files_with_status.clone()));
-            task.updated_at = chrono::Utc::now().to_rfc3339();
-            let _ = db.update_task(&task).await;
-        }
         
         // 发送完成事件
         let _ = app_handle.emit("download-progress", DownloadProgress {
@@ -932,6 +959,42 @@ async fn execute_download_task(
         active_downloads.insert(task_id, download_handle);
     }
     
+    Ok(())
+}
+
+/**
+ * 下载任务的内部实现函数（兼容性包装）
+ */
+async fn start_download_task_internal(
+    task: DownloadTask,
+    access_token: String,
+    app_handle: AppHandle,
+    state: State<'_, AppState>
+) -> Result<(), String> {
+    // 调用支持断点续传的函数，is_resume=false表示新任务
+    start_download_task_with_resume(task, access_token, app_handle, state, false).await
+}
+
+/**
+ * 执行下载任务
+ */
+#[tauri::command]
+async fn execute_download_task(
+    task_id: String,
+    access_token: String,
+    app_handle: AppHandle,
+    state: State<'_, AppState>
+) -> Result<bool, String> {
+    println!("开始执行下载任务: {}", task_id);
+    
+    // 获取任务信息
+    let task = state.db.get_task(&task_id).await
+        .map_err(|e| format!("获取任务失败: {}", e))?
+        .ok_or_else(|| format!("任务 {} 不存在", task_id))?;
+    
+    // 使用内部函数启动下载
+    start_download_task_internal(task, access_token, app_handle, state).await?;
+    
     Ok(true)
 }
 
@@ -951,13 +1014,141 @@ async fn retry_download_file(
 }
 
 /**
- * 恢复下载任务
+ * 开始下载任务
  */
 #[tauri::command]
-async fn resume_download_tasks(_state: State<'_, AppState>) -> Result<(), String> {
-    // 这里应该实现恢复下载逻辑
-    println!("恢复下载任务");
+async fn start_download_task(
+    task_id: String,
+    access_token: String,
+    app_handle: AppHandle,
+    state: State<'_, AppState>
+) -> Result<(), String> {
+    println!("开始下载任务: {}", task_id);
+    
+    // 从数据库获取任务信息
+    let task = match state.db.get_task(&task_id).await {
+        Ok(Some(task)) => task,
+        Ok(None) => return Err("任务不存在".to_string()),
+        Err(e) => return Err(format!("获取任务失败: {}", e)),
+    };
+    
+    // 检查任务状态
+    if task.status == "downloading" {
+        return Err("任务已在下载中".to_string());
+    }
+    
+    if task.status == "completed" {
+        return Err("任务已完成".to_string());
+    }
+    
+    start_download_task_internal(task, access_token, app_handle, state).await
+}
+
+/**
+ * 恢复下载任务（手动恢复）
+ */
+#[tauri::command]
+async fn resume_download_tasks(
+    access_token: String,
+    app_handle: AppHandle,
+    state: State<'_, AppState>
+) -> Result<(), String> {
+    println!("手动恢复下载任务");
+    
+    // 获取所有状态为pending的任务
+    let pending_tasks = match state.db.get_tasks_by_status("pending").await {
+        Ok(tasks) => tasks,
+        Err(e) => {
+            let error_msg = format!("获取pending任务失败: {}", e);
+            println!("{}", error_msg);
+            return Err(error_msg);
+        }
+    };
+    
+    if pending_tasks.is_empty() {
+        println!("没有需要恢复的下载任务");
+        return Ok(());
+    }
+    
+    println!("找到 {} 个需要恢复的下载任务", pending_tasks.len());
+    
+    // 为每个任务重新启动下载
+    for task in pending_tasks {
+        println!("恢复下载任务: {} - {}", task.id, task.name);
+        
+        // 检查任务是否已经在运行
+        {
+            let active_downloads = state.active_downloads.lock().unwrap();
+            if active_downloads.contains_key(&task.id) {
+                println!("任务 {} 已在运行中，跳过", task.id);
+                continue;
+            }
+        }
+        
+        // 重新启动下载任务，使用断点续传模式
+         let task_id_for_error = task.id.clone();
+         if let Err(e) = start_download_task_with_resume(task, access_token.clone(), app_handle.clone(), state.clone(), true).await {
+             println!("恢复任务 {} 失败: {}", task_id_for_error, e);
+             // 将失败的任务状态更新为失败
+             let _ = state.db.update_task_status(&task_id_for_error, "failed").await;
+         }
+    }
+    
+    println!("下载任务恢复完成");
     Ok(())
+}
+
+/**
+ * 恢复所有下载中状态的任务（不再使用pending状态）
+ */
+#[tauri::command]
+async fn resume_downloading_tasks(
+    access_token: String,
+    app_handle: AppHandle,
+    state: State<'_, AppState>
+) -> Result<String, String> {
+    println!("恢复所有下载中状态的任务");
+    
+    // 直接获取所有状态为downloading的任务
+    let downloading_tasks = state.db.get_downloading_tasks().await
+        .map_err(|e| format!("获取下载中任务失败: {}", e))?;
+    
+    if downloading_tasks.is_empty() {
+        println!("没有下载中状态的任务");
+        return Ok("没有需要恢复的任务".to_string());
+    }
+    
+    let task_count = downloading_tasks.len();
+    println!("找到 {} 个下载中状态的任务", task_count);
+    
+    // 恢复所有下载中的任务
+    for task in downloading_tasks {
+        let task_id = task.id.clone();
+        let task_name = task.name.clone();
+        println!("恢复下载任务: {} - {}", task_id, task_name);
+        
+        // 检查任务是否已经在运行
+        {
+            let active_downloads = state.active_downloads.lock().unwrap();
+            if active_downloads.contains_key(&task_id) {
+                println!("任务 {} 已在运行中，跳过", task_id);
+                continue;
+            }
+        }
+        
+        // 使用断点续传模式启动任务，利用数据库中的文件状态跳过已完成的文件
+        if let Err(e) = start_download_task_with_resume(
+            task,
+            access_token.clone(),
+            app_handle.clone(),
+            state.clone(),
+            true // is_resume = true
+        ).await {
+            println!("恢复任务 {} 失败: {}", task_id, e);
+        }
+    }
+    
+    Ok(format!("成功恢复 {} 个下载任务", task_count))
 }
 
 /**
@@ -1032,6 +1223,15 @@ pub fn run() {
             active_downloads: Arc::new(Mutex::new(HashMap::new())),
         };
         
+        // 在应用启动时恢复下载任务
+        let app_state_clone = AppState {
+            http_client: app_state.http_client.clone(),
+            db: app_state.db.clone(),
+            active_downloads: app_state.active_downloads.clone(),
+        };
+        
+        // 移除启动时的任务状态重置逻辑，因为resume_downloading_tasks现在直接处理downloading状态的任务
+        
         tauri::Builder::default()
             .plugin(tauri_plugin_oauth::init())
             .plugin(tauri_plugin_opener::init())
@@ -1050,11 +1250,13 @@ pub fn run() {
                 get_wiki_space_nodes,
                 create_download_task,
                 get_download_tasks,
+                get_task_files,
                 update_download_task,
                 delete_download_task,
+                start_download_task,
                 execute_download_task,
                 retry_download_file,
-                resume_download_tasks,
+                resume_downloading_tasks,
                 stop_download_task
             ])
             .run(tauri::generate_context!())

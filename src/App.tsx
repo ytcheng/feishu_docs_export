@@ -22,7 +22,7 @@ const App: React.FC = () => {
    * 处理授权成功回调
    * @param token - 获取到的access_token
    */
-  const handleAuth = (token: string) => {
+  const handleAuth = async (token: string) => {
     setAccessToken(token);
     setAuthed(true);
     
@@ -38,7 +38,15 @@ const App: React.FC = () => {
     }
     
     console.log('应用已切换到主界面，token已保存到状态中');
-  };
+    
+    // 恢复pending状态的下载任务
+     try {
+       await tauriApi.resumePendingDownloadTasks(token);
+       console.log('恢复pending下载任务完成');
+     } catch (error) {
+       console.error('恢复pending下载任务失败:', error);
+     }
+   };
 
   /**
    * 处理退出登录
@@ -56,24 +64,37 @@ const App: React.FC = () => {
 
 
   useEffect(() => {
-    const token = localStorage.getItem('feishu_access_token');
-    if (token) {
-      setAccessToken(token);
-      setAuthed(true);
-      
-      // 加载用户信息
-      const userInfoStr = localStorage.getItem('feishu_user_info');
-      if (userInfoStr) {
+    const initializeApp = async () => {
+      const token = localStorage.getItem('feishu_access_token');
+      if (token) {
+        setAccessToken(token);
+        setAuthed(true);
+        
+        // 加载用户信息
+        const userInfoStr = localStorage.getItem('feishu_user_info');
+
+        if (userInfoStr) {
+          try {
+            const userInfoData = JSON.parse(userInfoStr);
+            setUserInfo(userInfoData);
+          } catch (error) {
+            console.error('解析用户信息失败:', error);
+          }
+        }
+        
+        console.log('应用已切换到主界面，token已从localStorage加载');
+        
+        // 恢复pending状态的下载任务
         try {
-          const userInfoData = JSON.parse(userInfoStr);
-          setUserInfo(userInfoData);
+          await tauriApi.resumePendingDownloadTasks(token);
+          console.log('应用启动时恢复pending下载任务完成');
         } catch (error) {
-          console.error('解析用户信息失败:', error);
+          console.error('应用启动时恢复pending下载任务失败:', error);
         }
       }
-      
-      console.log('应用已切换到主界面，token已从localStorage加载');
-    }
+    };
+    
+    initializeApp();
     
     // 监听token过期事件
     const handleTokenExpired = () => {

@@ -246,6 +246,13 @@ export class TauriApi {
   }
 
   /**
+   * 恢复所有pending状态的下载任务
+   */
+  async resumePendingDownloadTasks(accessToken: string): Promise<string> {
+    return await invoke('resume_pending_download_tasks', { accessToken });
+  }
+
+  /**
    * 监听下载进度
    * @param callback 回调函数
    */
