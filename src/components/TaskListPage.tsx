@@ -1,10 +1,81 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Card, Table, Progress, Space, Button, Tag, message, Popconfirm, Typography, Spin, Tooltip } from 'antd';
 import { DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, ArrowLeftOutlined, StopOutlined } from '@ant-design/icons';
 import { DownloadTask, DownloadFile } from '../types';
 import { tauriApi } from '../utils/tauriApi';
 
 const { Text } = Typography;
+
+/**
+ * 懒加载文件列表组件 - 内部管理状态避免外部干扰
+ */
+const LazyFileList = React.memo<{
+  files: any[];
+  taskId: string;
+  fileColumns: any[];
+}>(({ files, taskId, fileColumns }) => {
+  const [displayCount, setDisplayCount] = useState(20);
+  const [isLoading, setIsLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // 调试日志
+  console.log(`LazyFileList render - taskId: ${taskId}, displayCount: ${displayCount}, totalFiles: ${files.length}, isLoading: ${isLoading}`);
+  
+  // 当前显示的文件列表
+  const displayedFiles = useMemo(() => {
+    return files.slice(0, displayCount).map(file => ({ ...file, taskId }));
+  }, [files, displayCount, taskId]);
+  
+  /**
+   * 处理滚动事件，实现懒加载
+   */
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const isNearBottom = scrollTop + clientHeight >= scrollHeight - 10;
+    
+    if (isNearBottom && displayCount < files.length && !isLoading) {
+      console.log(`Loading more files for task ${taskId}, current: ${displayCount}, total: ${files.length}`);
+      
+      setIsLoading(true);
+      
+      // 模拟加载延迟
+      setTimeout(() => {
+        const newCount = Math.min(displayCount + 20, files.length);
+        console.log(`Updated file count for task ${taskId}: ${newCount}`);
+        
+        setDisplayCount(newCount);
+        setIsLoading(false);
+      }, 100);
+    }
+  }, [taskId, displayCount, files.length, isLoading]);
+  
+  return (
+    <div 
+      ref={containerRef}
+      style={{ maxHeight: 300, overflow: 'auto' }}
+      onScroll={handleScroll}
+    >
+      <Table
+        columns={fileColumns}
+        dataSource={displayedFiles}
+        pagination={false}
+        size="small"
+        rowKey="token"
+        style={{ margin: 0 }}
+      />
+      {isLoading && (
+        <div style={{ textAlign: 'center', padding: '10px' }}>
+          <Spin size="small" /> 加载中...
+        </div>
+      )}
+      {displayCount < files.length && !isLoading && (
+        <div style={{ textAlign: 'center', padding: '10px', color: '#999' }}>
+          滑动到底部加载更多 ({displayCount}/{files.length})
+        </div>
+      )}
+    </div>
+  );
+});
 
 interface TaskListPageProps {
   onGoBack?: () => void;
@@ -21,19 +92,52 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
 
 
   /**
-   * 加载下载任务列表
+   * 加载下载任务列表（保持滚动位置）
    */
   const loadTasks = async () => {
+    // 保存当前滚动位置
+    const currentScrollTop = taskScrollRef.current?.scrollTop || 0;
+    
     setLoading(true);
     try {
       const taskList = await tauriApi.getDownloadTasks();
       console.log("loadTasks", taskList);
       setTasks(taskList);
+      
+      // 恢复滚动位置
+      setTimeout(() => {
+        if (taskScrollRef.current) {
+          taskScrollRef.current.scrollTop = currentScrollTop;
+        }
+      }, 50);
     } catch (error) {
       console.error('获取下载任务列表失败:', error);
       message.error('获取下载任务列表失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * 静默更新任务列表（不显示loading，保持滚动位置）
+   */
+  const updateTasksSilently = async () => {
+    // 保存当前滚动位置
+    const currentScrollTop = taskScrollRef.current?.scrollTop || 0;
+    
+    try {
+      const taskList = await tauriApi.getDownloadTasks();
+      console.log("updateTasksSilently", taskList);
+      setTasks(taskList);
+      
+      // 恢复滚动位置
+      setTimeout(() => {
+        if (taskScrollRef.current) {
+          taskScrollRef.current.scrollTop = currentScrollTop;
+        }
+      }, 10);
+    } catch (error) {
+      console.error('静默更新任务列表失败:', error);
     }
   };
 
@@ -128,28 +232,28 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     const handleDownloadProgress = (data: any) => {
       console.log('下载进度更新:', data);
       message.info(`正在下载: ${data.current_file} (${data.completed_files}/${data.total_files})`);
-      loadTasks(); // 重新加载任务列表以更新进度
+      updateTasksSilently(); // 静默更新任务列表以更新进度
     };
     
     // 监听下载完成
     const handleDownloadComplete = (data: any) => {
       console.log('下载完成:', data);
       message.success('下载任务完成！');
-      loadTasks(); // 重新加载任务列表
+      updateTasksSilently(); // 静默更新任务列表
     };
     
     // 监听下载错误
     const handleDownloadError = (data: any) => {
       console.log('下载错误:', data);
       message.error(`下载失败: ${data.error}`);
-      loadTasks(); // 重新加载任务列表
+      updateTasksSilently(); // 静默更新任务列表
     };
     
     // 监听文件下载错误
     const handleDownloadFileError = (data: any) => {
       console.log('文件下载错误:', data);
       message.error(`文件下载失败: ${data.fileName} - ${data.error}`);
-      loadTasks(); // 重新加载任务列表
+      updateTasksSilently(); // 静默更新任务列表
     };
     
     // 监听恢复下载任务通知
@@ -170,7 +274,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         if (access_token) {
           message.info(`正在恢复下载任务: ${data.taskName}`);
           await tauriApi.executeDownloadTask(data.taskId, access_token);
-          loadTasks(); // 重新加载任务列表
+          updateTasksSilently(); // 静默更新任务列表
         }
       } catch (error) {
         console.error('自动恢复下载任务失败:', error);
@@ -200,9 +304,12 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     
     setupListeners();
     
-    // 设置定时器定期更新任务状态
+    // 设置定时器定期更新任务状态（仅在有下载任务时）
     const interval = setInterval(() => {
-      loadTasks();
+      // 只有在有正在下载的任务时才更新，避免不必要的滚动位置重置
+      if (tasks.some(task => task.status === 'downloading')) {
+        updateTasksSilently();
+      }
     }, 3000); // 每3秒更新一次
     
     return () => {
@@ -512,20 +619,88 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     }
   };
 
-  // 展开行渲染函数
+
+
+
+  
+  /**
+   * 展开行渲染函数 - 使用懒加载优化性能
+   */
   const expandedRowRender = (record: DownloadTask) => {
-    // 为文件数据添加taskId属性
-    const filesWithTaskId = record.files ? record.files.map(file => ({ ...file, taskId: record.id })) : [];
+    const files = record.files || [];
     
     return (
-      <Table
-        columns={fileColumns}
-        dataSource={filesWithTaskId}
-        pagination={false}
-        size="small"
-        rowKey="token"
-        style={{ margin: 0 }}
+      <LazyFileList 
+        files={files} 
+        taskId={record.id}
+        fileColumns={fileColumns}
       />
+    );
+  };
+
+  // 任务列表懒加载状态
+  const [taskDisplayCount, setTaskDisplayCount] = useState(10);
+  const [taskIsLoading, setTaskIsLoading] = useState(false);
+  const taskScrollRef = useRef<HTMLDivElement>(null);
+  
+  // 当前显示的任务列表
+  const displayedTasks = useMemo(() => {
+    return tasks.slice(0, taskDisplayCount);
+  }, [tasks, taskDisplayCount]);
+  
+  /**
+   * 处理任务列表滚动事件，实现懒加载
+   */
+  const handleTaskScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const isNearBottom = scrollTop + clientHeight >= scrollHeight - 10;
+    
+    if (isNearBottom && taskDisplayCount < tasks.length && !taskIsLoading) {
+      setTaskIsLoading(true);
+      // 模拟加载延迟
+      setTimeout(() => {
+        setTaskDisplayCount(prev => Math.min(prev + 10, tasks.length));
+        setTaskIsLoading(false);
+      }, 100);
+    }
+  }, [taskDisplayCount, tasks.length, taskIsLoading]);
+  
+  /**
+   * 懒加载任务列表组件
+   */
+  const LazyTaskList: React.FC = () => {
+    return (
+      <div 
+        ref={taskScrollRef}
+        style={{ height: 'calc(100vh - 220px)', overflow: 'auto' }}
+        onScroll={handleTaskScroll}
+      >
+        <Table
+          columns={taskColumns}
+          dataSource={displayedTasks}
+          rowKey="id"
+          expandable={{
+             expandedRowRender,
+             expandedRowKeys,
+             onExpandedRowsChange: (keys) => setExpandedRowKeys(keys as string[]),
+             rowExpandable: (record) => Boolean(record.files && record.files.length > 0),
+           }}
+          pagination={false}
+          locale={{
+            emptyText: '暂无下载任务',
+          }}
+        />
+        {taskIsLoading && (
+          <div style={{ textAlign: 'center', padding: '10px' }}>
+            <Spin size="small" /> 加载中...
+          </div>
+        )}
+        {taskDisplayCount < tasks.length && !taskIsLoading && (
+          <div style={{ textAlign: 'center', padding: '10px', color: '#999' }}>
+            滑动到底部加载更多 ({taskDisplayCount}/{tasks.length})
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -543,28 +718,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         }
       >
         <Spin spinning={loading}>
-          <div style={{ height: 'calc(100vh - 220px)', overflow: 'auto' }}>
-            <Table
-              columns={taskColumns}
-              dataSource={tasks}
-              rowKey="id"
-              expandable={{
-                 expandedRowRender,
-                 expandedRowKeys,
-                 onExpandedRowsChange: (keys) => setExpandedRowKeys(keys as string[]),
-                 rowExpandable: (record) => Boolean(record.files && record.files.length > 0),
-               }}
-              pagination={{
-                pageSize: 10,
-                showSizeChanger: true,
-                showQuickJumper: true,
-                showTotal: (total) => `共 ${total} 个任务`,
-              }}
-              locale={{
-                emptyText: '暂无下载任务',
-              }}
-            />
-          </div>
+          <LazyTaskList />
         </Spin>
       </Card>
     </Space>
