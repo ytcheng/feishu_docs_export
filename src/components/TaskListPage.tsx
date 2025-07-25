@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Progress, Space, Button, Tag, message, Popconfirm, Typography, Spin, Tooltip } from 'antd';
-import { DownloadOutlined, DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, ArrowLeftOutlined, StopOutlined } from '@ant-design/icons';
+import { DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, ArrowLeftOutlined, StopOutlined } from '@ant-design/icons';
 import { DownloadTask, DownloadFile } from '../types';
 import { tauriApi } from '../utils/tauriApi';
 
@@ -543,7 +543,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         }
       >
         <Spin spinning={loading}>
-          <div style={{ height: 'calc(100vh - 180px)', overflow: 'auto' }}>
+          <div style={{ height: 'calc(100vh - 220px)', overflow: 'auto' }}>
             <Table
               columns={taskColumns}
               dataSource={tasks}

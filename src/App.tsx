@@ -159,7 +159,7 @@ const App: React.FC = () => {
           </Dropdown>
         )}
       </Header>
-      <Content style={{ height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
+      <Content style={{ padding: '24px', minHeight: 'calc(100vh - 64px)' }}>
         {currentPage === 'home' && <HomePage onViewTasks={() => setCurrentPage('list')} />}
         {currentPage === 'list' && <TaskListPage onGoBack={() => setCurrentPage('home')} />}
       </Content>

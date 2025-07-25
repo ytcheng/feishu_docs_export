@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Tree, Button, Space, message, Spin, Typography } from 'antd';
+import { Card, Tree, Button, Space, message, Spin } from 'antd';
 import { 
   DownloadOutlined, 
   FolderOutlined, 
@@ -678,7 +678,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
     if (downloadingTasks.length === 1) {
       const task = downloadingTasks[0];
       const progress = task.totalFiles > 0 ? Math.round((task.downloadedFiles / task.totalFiles) * 100) : 0;
-      text = `[1/1] ${progress}%`;
+        text = `正在导出...  [1/1] ${progress}%`;
       totalCount += 1;
       status = 'downloading';
     }
@@ -705,12 +705,12 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
   const activeTaskSummary = getActiveTaskSummary();
 
   return (
-    <div style={{ padding: '24px' }}>
-      
+    <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <Card 
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Button 
+            文件列表
+            <Button
               type="text"
               onClick={onViewTasks}
               style={{ 
@@ -736,7 +736,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
         }
       >
         <Spin spinning={loading}>
-          <div style={{ height: 'calc(100vh - 220px)', overflow: 'auto', border: '1px solid #d9d9d9', borderRadius: '6px', padding: '8px' }}>
+          <div style={{ height: 'calc(100vh - 220px)', overflow: 'auto' }}>
             <Tree
               checkable
               showIcon
@@ -750,7 +750,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
           </div>
         </Spin>
       </Card>
-    </div>
+    </Space>
   );
 };
 
