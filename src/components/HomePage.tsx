@@ -112,26 +112,17 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
    */
   const getFolderFiles = async (folderToken?: string): Promise<FileItem[]> => {
     try {
-      const response = await tauriApi.getFolderFiles(folderToken, 20);
+      console.log("getFolderFiles folderToken", folderToken);
+      const files = await tauriApi.getFolderFiles(folderToken);
+      return files.map((file) => {
+        return {
+          token: file.shortcut_info ? file.shortcut_info.target_token : file.token,
+          name: file.name,
+          type: file.type as FileItem['type'],
+          has_child: file.type === 'folder' // 文件不能展开
+        }
+      });
       
-      if (response.code === 0 && response.data) {
-        const allFiles = [
-          ...(response.data.folders || []).map(folder => ({
-            ...folder,
-            type: 'folder' as const,
-            has_child: true // 文件夹默认可以展开
-          })),
-          ...(response.data.files || []).map(file => ({
-            ...file,
-            type: file.type as FileItem['type'],
-            has_child: false // 文件不能展开
-          }))
-        ];
-        return allFiles;
-      } else {
-        message.error(`获取文件列表失败: ${response.msg}`);
-        return [];
-      }
     } catch (error) {
       console.error('获取文件列表失败:', error);
       message.error('获取文件列表失败');
@@ -144,20 +135,15 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
    */
   const getWikiSpaces = async (): Promise<FileItem[]> => {
     try {
-      const response = await tauriApi.getWikiSpaces(20);
+      const wikiSpaces = await tauriApi.getWikiSpaces();
       
-      if (response.code === 0 && response.data) {
-        return (response.data.items || []).map((space: any) => ({
+      return (wikiSpaces || []).map((space: any) => ({
           token: space.space_id,
           name: space.name || '未命名知识空间',
           type: 'wiki_space' as const,
           space_id: space.space_id,
           has_child: true // 知识空间默认可以展开
         }));
-      } else {
-        message.error(`获取知识空间列表失败: ${response.msg}`);
-        return [];
-      }
     } catch (error) {
       console.error('获取知识空间列表失败:', error);
       message.error('获取知识空间列表失败');
@@ -175,10 +161,9 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
         return [];
       }
       
-      const response = await tauriApi.getWikiSpaceNodes(spaceId, parentToken);
+      const wikiNodes = await tauriApi.getWikiSpaceNodes(spaceId, parentToken);
       
-      if (response.code === 0 && response.data) {
-        return (response.data.items || []).map((node: any) => ({
+      return (wikiNodes || []).map((node: any) => ({
           token: node.node_token,
           name: node.title || '未命名节点',
           type: 'wiki_node' as const,
@@ -188,10 +173,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
           obj_token: node.obj_token,
           has_child: node.has_child
         }));
-      } else {
-        message.error(`获取知识空间子节点失败: ${response.msg}`);
-        return [];
-      }
+      
     } catch (error) {
       console.error('获取知识空间子节点失败:', error);
       message.error('获取知识空间子节点失败');
@@ -204,14 +186,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
    */
   const getRootFolderMeta = async (): Promise<any> => {
     try {
-      const response = await tauriApi.getRootFolderMeta();
-      
-      if (response.code === 0 && response.data) {
-        return response.data;
-      } else {
-        message.error(`获取根文件夹失败: ${response.msg}`);
-        return null;
-      }
+      return await tauriApi.getRootFolderMeta();
     } catch (error) {
       console.error('获取根文件夹失败:', error);
       message.error('获取根文件夹失败');
@@ -269,6 +244,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
     setLoading(true);
     try {
       const rootMeta = await getRootFolderMeta();
+      console.log("loadRootData rootMeta", rootMeta);
       if (!rootMeta) {
         return;
       }

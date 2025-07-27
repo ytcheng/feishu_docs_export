@@ -44,19 +44,40 @@ pub struct UserInfo {
     pub user_id: Option<String>,
 }
 
-/// 飞书文件结构体
-// #[derive(Debug, Serialize, Deserialize, Clone)]
-// pub struct FeishuFile {
-//     pub token: String,
-//     pub name: String,
-//     #[serde(rename = "type")]
-//     pub file_type: String,
-//     pub parent_token: Option<String>,
-//     pub url: Option<String>,
-//     pub size: Option<i64>,
-//     pub created_time: Option<String>,
-//     pub modified_time: Option<String>,
-// }
+/// 根文件夹元数据结构体
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RootFolderMeta {
+    pub token: String,
+    pub id: String,
+    pub user_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FeishuFileShortcutInfo {
+    pub target_type: String,
+    pub target_token: String,
+}
+// 飞书文件结构体
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FeishuFile {
+    pub token: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub file_type: String,
+    pub parent_token: Option<String>,
+    pub url: Option<String>,
+    pub shortcut_info: Option<FeishuFileShortcutInfo>,
+    pub created_time: Option<String>,
+    pub modified_time: Option<String>,
+    pub owner_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FeishuFilesPagination {
+    pub files: Vec<FeishuFile>,
+    pub next_page_token: Option<String>,
+    pub has_more: bool,
+}
 
 /// 飞书文件夹结构体
 // #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -69,32 +90,49 @@ pub struct UserInfo {
 //     pub modified_time: Option<String>,
 // }
 
-// /// 飞书知识库空间结构体
-// #[derive(Debug, Serialize, Deserialize, Clone)]
-// pub struct FeishuWikiSpace {
-//     pub space_id: String,
-//     pub name: String,
-//     pub description: Option<String>,
-//     pub visibility: Option<String>,
-// }
+/// 飞书知识库空间结构体
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FeishuWikiSpace {
+    pub space_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub visibility: Option<String>,
+    pub space_type: String,
+    pub open_sharing: String,
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FeishuWikiSpacesPagination {
+    pub items: Vec<FeishuWikiSpace>,
+    pub page_token: Option<String>,
+    pub has_more: bool,
+}
+/// 飞书知识库节点结构体
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FeishuWikiNode {
+    pub space_id: String,
+    pub node_token: String,
+    pub obj_token: String,
+    pub obj_type: String,
+    pub parent_node_token: Option<String>,
+    pub node_type: String,
+    pub origin_node_token: Option<String>,
+    pub origin_space_id: Option<String>,
+    pub has_child: Option<bool>,
+    pub title: String,
+    pub obj_create_time: Option<String>,
+    pub obj_edit_time: Option<String>,
+    pub node_create_time: Option<String>,
+    pub creator: Option<String>,
+    pub owner: Option<String>,
+    pub node_creator: Option<String>,
+}
 
-// /// 飞书知识库节点结构体
-// #[derive(Debug, Serialize, Deserialize, Clone)]
-// pub struct FeishuWikiNode {
-//     pub space_id: String,
-//     pub node_token: String,
-//     pub obj_token: String,
-//     pub obj_type: String,
-//     pub parent_node_token: Option<String>,
-//     pub node_type: String,
-//     pub origin_node_token: Option<String>,
-//     pub origin_space_id: Option<String>,
-//     pub has_child: Option<bool>,
-//     pub title: String,
-//     pub obj_create_time: Option<String>,
-//     pub obj_edit_time: Option<String>,
-//     pub node_create_time: Option<String>,
-// }
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FeishuWikiNodesPagination {
+    pub items: Vec<FeishuWikiNode>,
+    pub page_token: Option<String>,
+    pub has_more: bool,
+}
 
 /// 下载任务结构体
 #[derive(Debug, Serialize, Deserialize, Clone)]

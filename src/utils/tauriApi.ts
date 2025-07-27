@@ -10,9 +10,13 @@ import type {
   FeishuWikiNode,
   ApiResponse,
   TokenInfo,
+  UserInfo,
   DownloadProgressEvent,
   DownloadCompleteEvent,
-  DownloadErrorEvent
+  DownloadErrorEvent,
+  FeishuRootMeta,
+  FeishuFilesPagination,
+  FeishuWikiSpacesPagination
 } from '../types';
 
 /**
@@ -69,20 +73,15 @@ export class TauriApi {
         return false;
       }
 
-      const response = await this.refreshAccessToken(refreshToken);
-      if (response.code === 0 && response.data) {
+      const tokenInfo = await this.refreshAccessToken(refreshToken);
         // 更新存储的令牌
-        localStorage.setItem('feishu_access_token', response.data.access_token);
-        if (response.data.refresh_token) {
-          localStorage.setItem('feishu_refresh_token', response.data.refresh_token);
+      localStorage.setItem('feishu_access_token', tokenInfo.access_token);
+      if (tokenInfo.refresh_token) {
+        localStorage.setItem('feishu_refresh_token', tokenInfo.refresh_token);
         }
         console.log('访问令牌刷新成功');
         return true;
-      } else {
-        console.error('刷新访问令牌失败:', response.msg);
-        this.clearAuthState();
-        return false;
-      }
+      
     } catch (error) {
       console.error('刷新访问令牌时发生错误:', error);
       this.clearAuthState();
@@ -149,7 +148,7 @@ export class TauriApi {
    * 获取访问令牌
    * @param code 授权码
    */
-  async getAccessToken(code: string): Promise<ApiResponse<TokenInfo>> {
+  async getAccessToken(code: string): Promise<TokenInfo> {
     return await invoke('get_access_token', { code });
   }
 
@@ -157,7 +156,7 @@ export class TauriApi {
    * 刷新访问令牌
    * @param refreshToken 刷新令牌
    */
-  async refreshAccessToken(refreshToken: string): Promise<ApiResponse<TokenInfo>> {
+  async refreshAccessToken(refreshToken: string): Promise<TokenInfo> {
     return await invoke('refresh_access_token', { refreshToken });
   }
 
@@ -165,7 +164,7 @@ export class TauriApi {
    * 获取用户信息
    * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
-  async getUserInfo(accessToken?: string): Promise<ApiResponse> {
+  async getUserInfo(accessToken?: string): Promise<UserInfo> {
     return await this.withTokenRefresh((token) => invoke('get_user_info', { accessToken: token }), accessToken);
   }
 
@@ -173,7 +172,7 @@ export class TauriApi {
    * 获取根文件夹元数据
    * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
-  async getRootFolderMeta(accessToken?: string): Promise<ApiResponse<FeishuFolder>> {
+  async getRootFolderMeta(accessToken?: string): Promise<FeishuRootMeta> {
     return await this.withTokenRefresh((token) => invoke('get_root_folder_meta', { accessToken: token }), accessToken);
   }
 
@@ -185,10 +184,9 @@ export class TauriApi {
    */
   async getFolderFiles(
     folderToken?: string,
-    pageSize?: number,
     accessToken?: string
-  ): Promise<ApiResponse<{ files: FeishuFile[]; folders: FeishuFolder[] }>> {
-    return await this.withTokenRefresh((token) => invoke('get_folder_files', { accessToken: token, folderToken, pageSize }), accessToken);
+  ): Promise<FeishuFile[]> {
+    return await this.withTokenRefresh((token) => invoke('get_folder_files', { accessToken: token, folderToken }), accessToken);
   }
 
   /**
@@ -197,10 +195,9 @@ export class TauriApi {
    * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
   async getWikiSpaces(
-    pageSize?: number,
     accessToken?: string
-  ): Promise<ApiResponse<{ items: FeishuWikiSpace[] }>> {
-    return await this.withTokenRefresh((token) => invoke('get_wiki_spaces', { accessToken: token, pageSize }), accessToken);
+  ): Promise<FeishuWikiSpace[]> {
+    return await this.withTokenRefresh((token) => invoke('get_wiki_spaces', { accessToken: token }), accessToken);
   }
 
   /**
@@ -213,7 +210,7 @@ export class TauriApi {
     spaceId?: string,
     parentNodeToken?: string,
     accessToken?: string
-  ): Promise<ApiResponse<{ items: FeishuWikiNode[] }>> {
+  ): Promise< FeishuWikiNode[] > {
     return await this.withTokenRefresh((token) => invoke('get_wiki_space_nodes', { accessToken: token, spaceId, parentNodeToken }), accessToken);
   }
 

@@ -61,7 +61,10 @@ export interface DownloadFile {
   relativePath?: string;
   spaceId?: string;
 }
-
+export interface FeishuFileShortcutInfo{
+  target_type: string;
+  target_token: string;
+}
 /**
  * 飞书文件接口
  */
@@ -71,9 +74,22 @@ export interface FeishuFile {
   type: string;
   parent_token?: string;
   url?: string;
-  size?: number;
+  shortcut_info?: FeishuFileShortcutInfo,
   created_time?: string;
   modified_time?: string;
+  owner_id?: String;
+}
+
+export interface FeishuFilesPagination {
+  files: FeishuFile[];
+  next_page_token?: string;
+  has_more: boolean;
+}
+
+export interface FeishuRootMeta{
+  token: string;
+  id: string;
+  user_id: string;
 }
 
 /**
@@ -96,6 +112,14 @@ export interface FeishuWikiSpace {
   name: string;
   description?: string;
   visibility?: string;
+  space_type?: string;
+  open_sharing?: string;
+}
+
+export interface FeishuWikiSpacesPagination {
+  items: FeishuWikiSpace[];
+  next_page_token?: string;
+  has_more: boolean;
 }
 
 /**

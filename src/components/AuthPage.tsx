@@ -46,33 +46,26 @@ const AuthPage: React.FC<{ onAuth: (token: string) => void }> = ({ onAuth }) => 
       console.log('收到授权码:', code);
       
       // 调用Tauri后端获取token
-      const result = await tauriApi.getAccessToken(code);
+      const tokenData = await tauriApi.getAccessToken(code);
+      // 获取用户信息
+      const user_info = await tauriApi.getUserInfo(tokenData.access_token);
+      console.log("handleAuthCallback user_info", user_info);
+      const authData: AuthData = {
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        user_info: user_info || {}
+      };
       
-      if (result.code === 0 && result.data) {
-        const tokenData = result.data;
-        
-        // 获取用户信息
-        const userInfoResult = await tauriApi.getUserInfo(tokenData.access_token);
-        
-        const authData: AuthData = {
-          access_token: tokenData.access_token,
-          refresh_token: tokenData.refresh_token,
-          user_info: userInfoResult.data || {}
-        };
-        
-        // 保存认证数据到本地存储
-        localStorage.setItem('feishu_access_token', authData.access_token);
-        localStorage.setItem('feishu_refresh_token', authData.refresh_token);
-        localStorage.setItem('feishu_user_info', JSON.stringify(authData.user_info));
-        
-        console.log('授权成功，已保存认证数据到localStorage');
-        message.success('授权成功！');
-        
-        // 授权成功，展示主界面
-        authCallbackRef.current(authData.access_token);
-      } else {
-        throw new Error(result.msg || '获取token失败');
-      }
+      // 保存认证数据到本地存储
+      localStorage.setItem('feishu_access_token', authData.access_token);
+      localStorage.setItem('feishu_refresh_token', authData.refresh_token);
+      localStorage.setItem('feishu_user_info', JSON.stringify(authData.user_info));
+      
+      console.log('授权成功，已保存认证数据到localStorage');
+      message.success('授权成功！');
+      
+      // 授权成功，展示主界面
+      authCallbackRef.current(authData.access_token);
     } catch (error) {
       console.error('授权失败:', error);
       message.error('授权失败，请重试');
