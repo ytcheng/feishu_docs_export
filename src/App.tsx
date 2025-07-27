@@ -14,7 +14,7 @@ const { Text } = Typography;
 
 const App: React.FC = () => {
   const [authed, setAuthed] = useState(false);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [_accessToken, setAccessToken] = useState<string | null>(null);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [currentPage, setCurrentPage] = useState<'home' | 'list'>('home');
 
@@ -41,7 +41,7 @@ const App: React.FC = () => {
     
     // 恢复pending状态的下载任务
      try {
-       await tauriApi.resumePendingDownloadTasks(token);
+       await tauriApi.resumeDownloadingTasks(token);
        console.log('恢复pending下载任务完成');
      } catch (error) {
        console.error('恢复pending下载任务失败:', error);
@@ -86,7 +86,7 @@ const App: React.FC = () => {
         
         // 恢复pending状态的下载任务
         try {
-          await tauriApi.resumePendingDownloadTasks(token);
+          await tauriApi.resumeDownloadingTasks(token);
           console.log('应用启动时恢复pending下载任务完成');
         } catch (error) {
           console.error('应用启动时恢复pending下载任务失败:', error);

@@ -1,8 +1,13 @@
 use serde::{Deserialize, Serialize};
+use tokio::runtime::Runtime;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 use reqwest::Client;
+use tauri::{Builder, Manager};
+
+// use tauri_utils::platform::app_data_dir;
+
 
 use tokio::task::JoinHandle;
 use std::path::Path;
@@ -1046,7 +1051,8 @@ async fn start_download_task(
 }
 
 /**
- * 恢复所有下载中状态的任务（不再使用pending状态）
+ * 恢复所有下载中状态的任务（自动恢复，不包括用户手动暂停的任务）
+ * 注意：此函数只恢复那些状态为 downloading 但实际没有在运行的任务
  */
 #[tauri::command]
 async fn resume_downloading_tasks(
@@ -1056,7 +1062,7 @@ async fn resume_downloading_tasks(
 ) -> Result<String, String> {
     println!("恢复所有下载中状态的任务");
     
-    // 直接获取所有状态为downloading的任务
+    // 获取所有下载中状态的任务
     let downloading_tasks = state.db.get_downloading_tasks().await
         .map_err(|e| format!("获取下载中任务失败: {}", e))?;
     
@@ -1065,25 +1071,35 @@ async fn resume_downloading_tasks(
         return Ok("没有需要恢复的任务".to_string());
     }
     
-    let task_count = downloading_tasks.len();
-    println!("找到 {} 个下载中状态的任务", task_count);
-    
-    // 恢复所有下载中的任务
-    for task in downloading_tasks {
-        let task_id = task.id.clone();
-        let task_name = task.name.clone();
-        println!("恢复下载任务: {} - {}", task_id, task_name);
-        
-        // 检查任务是否已经在运行
-        {
-            let active_downloads = state.active_downloads.lock().unwrap();
-            if active_downloads.contains_key(&task_id) {
-                println!("任务 {} 已在运行中，跳过", task_id);
-                continue;
+    // 过滤出真正需要恢复的任务（状态为 downloading 但没有在运行的）
+    let mut tasks_to_resume = Vec::new();
+    {
+        let active_downloads = state.active_downloads.lock().unwrap();
+        for task in downloading_tasks {
+            if !active_downloads.contains_key(&task.id) {
+                tasks_to_resume.push(task);
+            } else {
+                println!("任务 {} 已在运行中，跳过自动恢复", task.id);
             }
         }
+    }
+    
+    if tasks_to_resume.is_empty() {
+        println!("所有下载中状态的任务都已在运行，无需恢复");
+        return Ok("所有任务都已在运行".to_string());
+    }
+    
+    let mut resumed_count = 0;
+    println!("找到 {} 个需要恢复的任务", tasks_to_resume.len());
+    
+    // 恢复需要恢复的任务
+    for task in tasks_to_resume {
+        let task_id = task.id.clone();
+        let task_name = task.name.clone();
         
-        // 使用断点续传模式启动任务，利用数据库中的文件状态跳过已完成的文件
+        println!("恢复下载任务: {} - {}", task_id, task_name);
+        
+        // 使用断点续传模式启动任务
         if let Err(e) = start_download_task_with_resume(
             task,
             access_token.clone(),
@@ -1092,10 +1108,54 @@ async fn resume_downloading_tasks(
             true // is_resume = true
         ).await {
             println!("恢复任务 {} 失败: {}", task_id, e);
+        } else {
+            resumed_count += 1;
         }
     }
     
-    Ok(format!("成功恢复 {} 个下载任务", task_count))
+    Ok(format!("成功恢复 {} 个下载任务", resumed_count))
+}
+
+/**
+ * 手动恢复单个暂停的任务
+ */
+#[tauri::command]
+async fn resume_paused_task(
+    task_id: String,
+    access_token: String,
+    app_handle: AppHandle,
+    state: State<'_, AppState>
+) -> Result<(), String> {
+    println!("手动恢复暂停的任务: {}", task_id);
+    
+    // 从数据库获取任务信息
+    let task = match state.db.get_task(&task_id).await {
+        Ok(Some(task)) => task,
+        Ok(None) => return Err("任务不存在".to_string()),
+        Err(e) => return Err(format!("获取任务失败: {}", e)),
+    };
+    
+    // 检查任务状态
+    if task.status != "paused" {
+        return Err("只能恢复暂停状态的任务".to_string());
+    }
+    
+    // 检查任务是否已经在运行
+    {
+        let active_downloads = state.active_downloads.lock().unwrap();
+        if active_downloads.contains_key(&task_id) {
+            return Err("任务已在运行中".to_string());
+        }
+    }
+    
+    // 使用断点续传模式启动任务
+    start_download_task_with_resume(
+        task,
+        access_token,
+        app_handle,
+        state,
+        true // is_resume = true
+    ).await
 }
 
 /**
@@ -1118,10 +1178,10 @@ async fn stop_download_task(
         // 取消任务
         handle.abort();
         
-        // 更新任务状态
-        let _ = state.db.update_task_status(&task_id, "cancelled").await;
+        // 更新任务状态为暂停，这样可以被恢复
+        let _ = state.db.update_task_status(&task_id, "paused").await;
         
-        println!("下载任务已停止: {}", task_id);
+        println!("下载任务已暂停: {}", task_id);
         Ok(true)
     } else {
         Err(format!("任务 {} 不在运行中", task_id))
@@ -1133,12 +1193,15 @@ async fn stop_download_task(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::async_runtime::block_on(async {
-        // 获取应用数据目录
-        let app_data_dir = std::env::current_dir().unwrap().join(".data");
+    Builder::default().setup(|app| {
+        // 使用新 API 获取路径
+        let resolver = app.path();
+        let data_dir = resolver.app_data_dir()
+            .expect("failed to get app_data_dir");
+
+        let app_data_dir = data_dir.join(".data");
         println!("数据目录路径: {:?}", app_data_dir);
-        
-        // 确保数据目录存在
+
         if !app_data_dir.exists() {
             println!("创建数据目录: {:?}", app_data_dir);
             std::fs::create_dir_all(&app_data_dir)
@@ -1146,12 +1209,11 @@ pub fn run() {
         } else {
             println!("数据目录已存在: {:?}", app_data_dir);
         }
-        
+
         let db_path = app_data_dir.join("feishu_export.db");
         let db_path_str = db_path.to_string_lossy().to_string();
         println!("数据库文件路径: {}", db_path_str);
-        
-        // 检查目录权限
+
         match std::fs::metadata(&app_data_dir) {
             Ok(metadata) => {
                 println!("目录权限: {:?}", metadata.permissions());
@@ -1160,46 +1222,51 @@ pub fn run() {
                 println!("无法获取目录元数据: {}", e);
             }
         }
-        
-        let database = Database::new(&db_path_str).await
+
+        // 关键：在同步上下文里用 tokio runtime 跑异步初始化
+        let rt = Runtime::new().unwrap();
+        let database = rt.block_on(Database::new(&db_path_str))
             .expect("Failed to initialize database");
-        
+
         let app_state = AppState {
             http_client: Client::new(),
             db: Arc::new(database),
             active_downloads: Arc::new(Mutex::new(HashMap::new())),
         };
-        
-        
-        
-        tauri::Builder::default()
-            .plugin(tauri_plugin_oauth::init())
-            .plugin(tauri_plugin_opener::init())
-            .plugin(tauri_plugin_dialog::init())
-            .plugin(tauri_plugin_fs::init())
-            .plugin(tauri_plugin_http::init())
-            .plugin(tauri_plugin_shell::init())
-            .manage(app_state)
-            .invoke_handler(tauri::generate_handler![
-                get_access_token,
-                refresh_access_token,
-                get_user_info,
-                get_root_folder_meta,
-                get_folder_files,
-                get_wiki_spaces,
-                get_wiki_space_nodes,
-                create_download_task,
-                get_download_tasks,
-                get_task_files,
-                update_download_task,
-                delete_download_task,
-                start_download_task,
-                execute_download_task,
-                retry_download_file,
-                resume_downloading_tasks,
-                stop_download_task
-            ])
-            .run(tauri::generate_context!())
-            .expect("error while running tauri application");
-    });
+
+        // 注册到状态
+        app.manage(app_state);
+
+        Ok(())
+    })
+        .plugin(tauri_plugin_oauth::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_shell::init())
+        // .manage(app_state)
+        .invoke_handler(tauri::generate_handler![
+            get_access_token,
+            refresh_access_token,
+            get_user_info,
+            get_root_folder_meta,
+            get_folder_files,
+            get_wiki_spaces,
+            get_wiki_space_nodes,
+            create_download_task,
+            get_download_tasks,
+            get_task_files,
+            update_download_task,
+            delete_download_task,
+            start_download_task,
+            execute_download_task,
+            retry_download_file,
+            resume_downloading_tasks,
+            resume_paused_task,
+            stop_download_task
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+   
 }

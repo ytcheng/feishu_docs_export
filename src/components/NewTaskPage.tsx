@@ -13,7 +13,7 @@ import {
 } from '@ant-design/icons';
 import type { TreeDataNode } from 'antd';
 import { tauriApi } from '../utils/tauriApi';
-import { FeishuFile, FeishuFolder, FeishuWikiSpace, FeishuWikiNode, DownloadTask, DownloadFile } from '../types';
+import {  DownloadTask, DownloadFile } from '../types';
 
 interface FileItem {
   token: string;
@@ -195,7 +195,7 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
   /**
    * 将文件列表转换为树形数据
    */
-  const convertToTreeData = (files: FileItem[], parentToken?: string): TreeNode[] => {
+  const convertToTreeData = (files: FileItem[]): TreeNode[] => {
     return files.map(file => {
       // 对于知识库节点，只有当 has_child 为 true 时才能展开
       const canExpand = file.type === 'wiki_node' ? file.has_child : ['folder', 'wiki_space'].includes(file.type);
@@ -224,17 +224,17 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
     
     if (node.fileItem.type === 'folder') {
       const files = await getFolderFiles(node.fileItem.token);
-      childNodes = convertToTreeData(files, node.fileItem.token);
+      childNodes = convertToTreeData(files);
     } else if (node.fileItem.type === 'wiki_root') {
       // 知识库根节点，加载知识空间列表
       const spaces = await getWikiSpaces();
-      childNodes = convertToTreeData(spaces, 'wiki_root');
+      childNodes = convertToTreeData(spaces);
     } else if (node.fileItem.type === 'wiki_space') {
       const nodes = await getWikiSpaceNodes(node.fileItem.space_id!);
-      childNodes = convertToTreeData(nodes, node.fileItem.token);
+      childNodes = convertToTreeData(nodes);
     } else if (node.fileItem.type === 'wiki_node') {
       const nodes = await getWikiSpaceNodes(node.fileItem.space_id!, node.fileItem.token);
-      childNodes = convertToTreeData(nodes, node.fileItem.token);
+      childNodes = convertToTreeData(nodes);
     }
     
     setTreeData(prevData => {
@@ -337,7 +337,7 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
   /**
    * 构建文件的相对路径，保持与树形结构一致的目录层级
    */
-  const buildFilePath = (file: FileItem, pathFromRoot: string[] = []): string => {
+  const buildFilePath = (pathFromRoot: string[] = []): string => {
     
     // 构建完整路径：根目录 + 路径层级 + 文件名
     const fullPath = pathFromRoot.filter(Boolean).join('/');
@@ -373,14 +373,14 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
           // 递归获取子文件夹的文件，传递当前路径
           const newPath = [...currentPath, file.name || '未命名文件夹'];
           if(file.type === 'wiki_node'){
-            const fullPath = buildFilePath(file, currentPath);
+            const fullPath = buildFilePath(currentPath);
             allFiles.push({ ...file, fullPath });
           }
           const subFiles = await getAllFilesFromFolderWithPath(file.token, file.type, file.space_id || spaceId, newPath);
           allFiles.push(...subFiles);
         } else {
           // 叶子节点文件，构建完整路径
-          const fullPath = buildFilePath(file, currentPath);
+          const fullPath = buildFilePath(currentPath);
           allFiles.push({ ...file, fullPath });
         }
       }
@@ -450,7 +450,7 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
       
       if (fileItem.type === 'folder' || fileItem.type === 'wiki_root' || fileItem.type === 'wiki_space' || (fileItem.type === 'wiki_node' && fileItem.has_child)) {
         if (fileItem.type === 'wiki_node') {
-          const fullPath = buildFilePath(fileItem, nodePath || []);
+          const fullPath = buildFilePath(nodePath || []);
           allFiles.push({ ...fileItem, fullPath });
         }
         // 文件夹类型，获取其下所有文件
@@ -458,7 +458,7 @@ const NewTaskPage: React.FC<NewTaskPageProps> = ({ onTaskCreated }) => {
         allFiles.push(...folderFiles);
       } else {
         // 单个文件，构建路径
-        const fullPath = buildFilePath(fileItem, pathFromRoot);
+        const fullPath = buildFilePath(pathFromRoot);
         allFiles.push({ ...fileItem, fullPath });
       }
     }

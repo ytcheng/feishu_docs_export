@@ -2,8 +2,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { open as openPath } from '@tauri-apps/plugin-shell';
-import { fetch } from '@tauri-apps/plugin-http';
-import { writeTextFile, readTextFile, exists, create } from '@tauri-apps/plugin-fs';
 import type {
   DownloadTask,
   FeishuFile,
@@ -350,17 +348,27 @@ export class TauriApi {
 
   /**
    * 恢复下载任务
+   * @param accessToken 访问令牌（可选）
    */
-  async resumeDownloadTasks(): Promise<void> {
-    return await invoke('resume_download_tasks');
+  async resumeDownloadTasks(accessToken?: string): Promise<string> {
+    return await this.withTokenRefresh((token) => invoke('resume_downloading_tasks', { accessToken: token }), accessToken);
   }
 
   /**
    * 恢复所有pending状态的下载任务
    * @param accessToken 访问令牌（可选）
    */
-  async resumePendingDownloadTasks(accessToken?: string): Promise<string> {
-    return await this.withTokenRefresh((token) => invoke('resume_pending_download_tasks', { accessToken: token }), accessToken);
+  async resumeDownloadingTasks(accessToken?: string): Promise<string> {
+    return await this.withTokenRefresh((token) => invoke('resume_downloading_tasks', { accessToken: token }), accessToken);
+  }
+
+  /**
+   * 手动恢复单个暂停的任务
+   * @param taskId 任务ID
+   * @param accessToken 访问令牌（可选）
+   */
+  async resumePausedTask(taskId: string, accessToken?: string): Promise<void> {
+    return await this.withTokenRefresh((token) => invoke('resume_paused_task', { taskId, accessToken: token }), accessToken);
   }
 
   /**
@@ -434,7 +442,7 @@ export class TauriApi {
    * @param callback 回调函数
    */
   async onTokenExpired(callback: () => void): Promise<() => void> {
-    const unlisten = await listen('token-expired', (event) => {
+    const unlisten = await listen('token-expired', (_event) => {
       callback();
     });
     this.tokenExpiredUnlisten = unlisten;

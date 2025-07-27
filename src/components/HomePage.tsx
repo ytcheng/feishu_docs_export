@@ -48,9 +48,8 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [savePath, setSavePath] = useState('');
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
-  const [tasksLoading, setTasksLoading] = useState(false);
+  const [_tasksLoading, setTasksLoading] = useState(false);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
 
   /**
@@ -319,25 +318,6 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
     setExpandedKeys(keys as string[]);
   };
 
-  /**
-   * 选择保存目录
-   */
-  const handleSelectDirectory = async () => {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-      });
-      
-      if (selected && typeof selected === 'string') {
-        setSavePath(selected);
-        message.success('保存目录选择成功');
-      }
-    } catch (error) {
-      console.error('选择目录失败:', error);
-      message.error('选择目录失败');
-    }
-  };
 
   /**
    * 构建文件路径

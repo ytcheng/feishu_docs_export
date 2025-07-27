@@ -242,11 +242,46 @@ impl Database {
     }
 
     /**
-     * 获取正在下载的任务列表
+     * 获取正在下载的任务列表（排除当前正在运行的任务）
      */
     pub async fn get_downloading_tasks(&self) -> Result<Vec<DownloadTask>, sqlx::Error> {
         let rows = sqlx::query(
             "SELECT * FROM download_tasks WHERE status = 'downloading' ORDER BY created_at ASC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut tasks = Vec::new();
+        for row in rows {
+            let task_id: String = row.get("id");
+            let files = self.get_task_files(&task_id).await?;
+            
+            tasks.push(DownloadTask {
+                id: task_id,
+                name: row.get("name"),
+                description: row.get("description"),
+                status: row.get("status"),
+                progress: row.get("progress"),
+                total_files: row.get("total_files"),
+                downloaded_files: row.get("downloaded_files"),
+                failed_files: row.get("failed_files"),
+                output_path: row.get("output_path"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                source_type: row.get("source_type"),
+                files: Some(files),
+            });
+        }
+
+        Ok(tasks)
+    }
+
+    /**
+     * 获取可恢复的任务（下载中和暂停状态）
+     */
+    pub async fn get_resumable_tasks(&self) -> Result<Vec<DownloadTask>, sqlx::Error> {
+        let rows = sqlx::query(
+            "SELECT * FROM download_tasks WHERE status IN ('downloading', 'paused') ORDER BY created_at ASC"
         )
         .fetch_all(&self.pool)
         .await?;

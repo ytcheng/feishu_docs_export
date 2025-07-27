@@ -169,7 +169,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   };
 
   /**
-   * 开始下载任务
+   * 开始下载任务（根据任务状态调用不同的API）
    */
   const handleStartDownload = async (taskId: string) => {
     try {
@@ -180,9 +180,25 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         return;
       }
       
-      message.info('任务开始下载，请稍候...');
-      await tauriApi.executeDownloadTask(taskId, access_token);
-      message.success('任务开始下载');
+      // 找到对应的任务
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) {
+        message.error('任务不存在');
+        return;
+      }
+      
+      if (task.status === 'paused') {
+        // 暂停状态的任务使用恢复API
+        message.info('正在恢复暂停的任务...');
+        await tauriApi.resumePausedTask(taskId, access_token);
+        message.success('任务已恢复下载');
+      } else {
+        // 其他状态的任务使用普通下载API
+        message.info('任务开始下载，请稍候...');
+        await tauriApi.executeDownloadTask(taskId, access_token);
+        message.success('任务开始下载');
+      }
+      
       loadTasks(); // 重新加载任务列表
     } catch (error) {
       console.error('开始下载失败:', error);
@@ -208,16 +224,23 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   /**
    * 自动恢复下载任务
    */
-  const handleAutoResumeDownloadTasks = async () => {
-    try {
-      await tauriApi.resumeDownloadTasks();
-      message.success('下载任务已恢复');
-      loadTasks(); // 重新加载任务列表
-    } catch (error) {
-       console.error('自动恢复下载任务失败:', error);
-       message.error('自动恢复下载任务失败');
-     }
-   };
+  // const handleAutoResumeDownloadTasks = async () => {
+  //   try {
+  //     // 从localStorage获取访问令牌
+  //     const access_token = localStorage.getItem('feishu_access_token');
+  //     if (!access_token) {
+  //       message.error('请先登录飞书账号');
+  //       return;
+  //     }
+      
+  //     const result = await tauriApi.resumeDownloadTasks(access_token);
+  //      message.success(result || '下载任务已恢复');
+  //     loadTasks(); // 重新加载任务列表
+  //   } catch (error) {
+  //      console.error('自动恢复下载任务失败:', error);
+  //      message.error('自动恢复下载任务失败');
+  //    }
+  //  };
 
   /**
    * 组件挂载时加载数据
@@ -257,14 +280,14 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     };
     
     // 监听恢复下载任务通知
-    const handleResumeDownloadTasks = (data: any) => {
-      console.log('发现未完成的下载任务:', data);
-      if (data.count > 0) {
-        message.info(`发现 ${data.count} 个未完成的下载任务，正在自动恢复...`);
-        // 自动调用恢复下载任务
-        handleAutoResumeDownloadTasks();
-      }
-    };
+    // const handleResumeDownloadTasks = (data: any) => {
+    //   console.log('发现未完成的下载任务:', data);
+    //   if (data.count > 0) {
+    //     message.info(`发现 ${data.count} 个未完成的下载任务，正在自动恢复...`);
+    //     // 自动调用恢复下载任务
+    //     handleAutoResumeDownloadTasks();
+    //   }
+    // };
     
     // 监听自动恢复单个任务
     const handleAutoResumeTask = async (data: any) => {
@@ -421,6 +444,17 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
                 title="停止下载"
               >
                 停止
+              </Button>
+            )}
+            {record.status === 'paused' && (
+              <Button
+                icon={<PlayCircleOutlined />}
+                size="small"
+                type="primary"
+                onClick={() => handleStartDownload(record.id)}
+                title="恢复下载"
+              >
+                恢复
               </Button>
             )}
             {(record.status === 'completed' || record.status === 'failed') && hasFailedFiles(record) && (

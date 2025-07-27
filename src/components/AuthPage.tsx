@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Card, Typography, message } from 'antd';
 import { tauriApi } from '../utils/tauriApi'; 
 import { openUrl} from '@tauri-apps/plugin-opener'
-import { start, cancel, onUrl, onInvalidUrl } from '@fabianlars/tauri-plugin-oauth';
+import { start, cancel, onUrl } from '@fabianlars/tauri-plugin-oauth';
 
 
 
@@ -191,8 +191,10 @@ const AuthPage: React.FC<{ onAuth: (token: string) => void }> = ({ onAuth }) => 
         if (!qrInitializedRef.current) return;
 
         const FEISHU_REDIRECT_URI = `http://localhost:${port.current}/callback`;
+        console.log("FEISHU_REDIRECT_URI", FEISHU_REDIRECT_URI);
         // @ts-ignore
         const goto = `https://passport.feishu.cn/suite/passport/oauth/authorize?client_id=${FEISHU_APP_ID}&redirect_uri=${FEISHU_REDIRECT_URI}&response_type=code&state=STATE`;
+        console.log("goto", goto);
         try {
           // 清理页面中所有可能存在的飞书QR码元素
           const existingQRIframes = document.querySelectorAll('iframe[src*="feishu"], iframe[src*="lark"]');
