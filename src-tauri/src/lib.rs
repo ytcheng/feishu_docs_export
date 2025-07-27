@@ -32,6 +32,11 @@ struct ApiResponse<T> {
     msg: String,
     data: Option<T>,
 }
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ApiError {
+    code: i32,
+    msg: String
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct TokenInfo {
@@ -200,7 +205,7 @@ struct AppState {
  * 获取访问令牌
  */
 #[tauri::command]
-async fn get_access_token(code: String, state: State<'_, AppState>) -> Result<ApiResponse<TokenInfo>, String> {
+async fn get_access_token(code: String, state: State<'_, AppState>) -> Result<ApiResponse<TokenInfo>, ApiError> {
     let client = &state.http_client;
     
     let mut params = HashMap::new();
@@ -215,13 +220,24 @@ async fn get_access_token(code: String, state: State<'_, AppState>) -> Result<Ap
         .json(&params)
         .send()
         .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("请求失败: {}", e),
+        })?;
     
     let result: ApiResponse<TokenInfo> = response
         .json()
         .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-    
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("解析响应失败: {}", e),
+        })?;
+    if result.code != 0 {
+        return Err(ApiError {
+            code: result.code,
+            msg: result.msg,
+        });
+    }
     Ok(result)
 }
 
@@ -229,7 +245,7 @@ async fn get_access_token(code: String, state: State<'_, AppState>) -> Result<Ap
  * 刷新访问令牌
  */
 #[tauri::command]
-async fn refresh_access_token(refresh_token: String, state: State<'_, AppState>) -> Result<ApiResponse<TokenInfo>, String> {
+async fn refresh_access_token(refresh_token: String, state: State<'_, AppState>) -> Result<ApiResponse<TokenInfo>, ApiError> {
     let client = &state.http_client;
     
     let mut params = HashMap::new();
@@ -244,13 +260,24 @@ async fn refresh_access_token(refresh_token: String, state: State<'_, AppState>)
         .json(&params)
         .send()
         .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("请求失败: {}", e),
+        })?;
     
     let result: ApiResponse<TokenInfo> = response
         .json()
         .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-    
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("解析响应失败: {}", e),
+        })?;
+    if result.code != 0 {
+        return Err(ApiError {
+            code: result.code,
+            msg: result.msg,
+        });
+    }
     Ok(result)
 }
 
@@ -258,7 +285,7 @@ async fn refresh_access_token(refresh_token: String, state: State<'_, AppState>)
  * 获取用户信息
  */
 #[tauri::command]
-async fn get_user_info(access_token: String, state: State<'_, AppState>) -> Result<ApiResponse<UserInfo>, String> {
+async fn get_user_info(access_token: String, state: State<'_, AppState>) -> Result<ApiResponse<UserInfo>, ApiError> {
     let client = &state.http_client;
     
     let response = client
@@ -266,13 +293,23 @@ async fn get_user_info(access_token: String, state: State<'_, AppState>) -> Resu
         .header("Authorization", format!("Bearer {}", access_token))
         .send()
         .await
-        .map_err(|e| format!("请求失败: {}", e))?;
-    
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("请求失败: {}", e),
+        })?;    
     let result: ApiResponse<UserInfo> = response
         .json()
         .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-    
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("解析响应失败: {}", e),
+        })?;
+    if result.code != 0 {
+        return Err(ApiError {
+            code: result.code,
+            msg: result.msg,
+        });
+    }
     Ok(result)
 }
 
@@ -288,7 +325,7 @@ struct RootFolderMeta {
  * 根据飞书API文档: https://open.feishu.cn/document/server-docs/docs/drive-v1/folder/get-root-folder-meta
  */
 #[tauri::command]
-async fn get_root_folder_meta(access_token: String, state: State<'_, AppState>) -> Result<ApiResponse<RootFolderMeta>, String> {
+async fn get_root_folder_meta(access_token: String, state: State<'_, AppState>) -> Result<ApiResponse<RootFolderMeta>, ApiError> {
     let client = &state.http_client;
     
     let response = client
@@ -296,13 +333,24 @@ async fn get_root_folder_meta(access_token: String, state: State<'_, AppState>) 
         .header("Authorization", format!("Bearer {}", access_token))
         .send()
         .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("请求失败: {}", e),
+        })?;
     
     let result: ApiResponse<RootFolderMeta> = response
         .json()
         .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-    
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("解析响应失败: {}", e),
+        })?;
+    if result.code != 0 {
+        return Err(ApiError {
+            code: result.code,
+            msg: result.msg,
+        });
+    }
     Ok(result)
 }
 
@@ -315,7 +363,7 @@ async fn get_folder_files(
     folder_token: Option<String>,
     page_size: Option<i32>,
     state: State<'_, AppState>
-) -> Result<ApiResponse<serde_json::Value>, String> {
+) -> Result<ApiResponse<serde_json::Value>, ApiError> {
     let client = &state.http_client;
     
     let mut query_params = vec![];
@@ -332,13 +380,25 @@ async fn get_folder_files(
         .query(&query_params)
         .send()
         .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("请求失败: {}", e),
+        })?;
     
     let result: ApiResponse<serde_json::Value> = response
         .json()
         .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-    
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("解析响应失败: {}", e),
+        })?;
+
+    if result.code != 0 {
+        return Err(ApiError {
+            code: result.code,
+            msg: result.msg,
+        });
+    }
     Ok(result)
 }
 
@@ -350,7 +410,7 @@ async fn get_wiki_spaces(
     access_token: String,
     page_size: Option<i32>,
     state: State<'_, AppState>
-) -> Result<ApiResponse<serde_json::Value>, String> {
+) -> Result<ApiResponse<serde_json::Value>, ApiError> {
     let client = &state.http_client;
     
     let mut query_params = vec![];
@@ -364,13 +424,24 @@ async fn get_wiki_spaces(
         .query(&query_params)
         .send()
         .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("请求失败: {}", e),
+        })?;
     
     let result: ApiResponse<serde_json::Value> = response
         .json()
         .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-    
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("解析响应失败: {}", e),
+        })?;
+    if result.code != 0 {
+        return Err(ApiError {
+            code: result.code,
+            msg: result.msg,
+        });
+    }
     Ok(result)
 }
 
@@ -384,7 +455,7 @@ async fn get_wiki_space_nodes(
     space_id: String,
     parent_node_token: Option<String>,
     state: State<'_, AppState>
-) -> Result<ApiResponse<serde_json::Value>, String> {
+) -> Result<ApiResponse<serde_json::Value>, ApiError> {
     let client = &state.http_client;
     println!("get_wiki_space_nodes: space_id: {}, parent_node_token: {:?}", space_id, parent_node_token);
     
@@ -402,13 +473,24 @@ async fn get_wiki_space_nodes(
         .query(&query_params)
         .send()
         .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("请求失败: {}", e),
+        })?;
     
     let result: ApiResponse<serde_json::Value> = response
         .json()
         .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-    
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("解析响应失败: {}", e),
+        })?;
+    if result.code != 0 {
+        return Err(ApiError {
+            code: result.code,
+            msg: result.msg,
+        });
+    }
     Ok(result)
 }
 
@@ -419,7 +501,7 @@ async fn get_wiki_space_nodes(
 async fn create_download_task(
     task_request: CreateDownloadTaskRequest,
     state: State<'_, AppState>
-) -> Result<DownloadTask, String> {
+) -> Result<DownloadTask, ApiError> {
     let task_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     
@@ -440,12 +522,18 @@ async fn create_download_task(
     };
     
     state.db.create_task(&new_task).await
-        .map_err(|e| format!("创建任务失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("创建任务失败: {}", e),
+        })?;
     
     // 存储文件列表到download_files表
     for file in task_request.files {
         state.db.create_file(&task_id, &file).await
-            .map_err(|e| format!("创建任务文件失败: {}", e))?;
+            .map_err(|e| ApiError {
+                code: -1,
+                msg: format!("创建任务文件失败: {}", e),
+            })?;
     }
     
     Ok(new_task)
@@ -455,9 +543,12 @@ async fn create_download_task(
  * 获取下载任务列表
  */
 #[tauri::command]
-async fn get_download_tasks(state: State<'_, AppState>) -> Result<Vec<DownloadTask>, String> {
+async fn get_download_tasks(state: State<'_, AppState>) -> Result<Vec<DownloadTask>, ApiError> {
     state.db.get_all_tasks().await
-        .map_err(|e| format!("获取任务列表失败: {}", e))
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("获取任务列表失败: {}", e),
+        })
 }
 
 /**
@@ -467,9 +558,12 @@ async fn get_download_tasks(state: State<'_, AppState>) -> Result<Vec<DownloadTa
 async fn get_task_files(
     task_id: String,
     state: State<'_, AppState>
-) -> Result<Vec<FileInfo>, String> {
+) -> Result<Vec<FileInfo>, ApiError> {
     state.db.get_task_files(&task_id).await
-        .map_err(|e| format!("获取任务文件列表失败: {}", e))
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("获取任务文件列表失败: {}", e),
+        })
 }
 
 /**
@@ -480,12 +574,15 @@ async fn update_download_task(
     task_id: String,
     updates: serde_json::Value,
     state: State<'_, AppState>
-) -> Result<bool, String> {
+) -> Result<bool, ApiError> {
     // 先获取现有任务
     let mut task = match state.db.get_task(&task_id).await {
         Ok(Some(task)) => task,
         Ok(None) => return Ok(false),
-        Err(e) => return Err(format!("获取任务失败: {}", e)),
+        Err(e) => return Err(ApiError {
+            code: -1,
+            msg: format!("获取任务失败: {}", e),
+        }),
     };
     
     // 更新字段
@@ -521,7 +618,10 @@ async fn update_download_task(
     task.updated_at = chrono::Utc::now().to_rfc3339();
     
     state.db.update_task(&task).await
-        .map_err(|e| format!("更新任务失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("更新任务失败: {}", e),
+        })?;
     
     Ok(true)
 }
@@ -533,9 +633,12 @@ async fn update_download_task(
 async fn delete_download_task(
     id: String,
     state: State<'_, AppState>
-) -> Result<bool, String> {
+) -> Result<bool, ApiError> {
     state.db.delete_task(&id).await
-        .map_err(|e| format!("删除任务失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("删除任务失败: {}", e),
+        })?;
     Ok(true)
 }
 
@@ -558,7 +661,7 @@ async fn create_export_task(
     access_token: &str,
     file_token: &str,
     file_type: &str,
-) -> Result<String, String> {
+) -> Result<String, ApiError> {
     let extension = get_default_extension(file_type);
     
     let request_body = ExportTaskRequest {
@@ -574,24 +677,39 @@ async fn create_export_task(
         .json(&request_body)
         .send()
         .await
-        .map_err(|e| format!("创建导出任务请求失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("创建导出任务请求失败: {}", e),
+        })?;
     
     if !response.status().is_success() {
-        return Err(format!("创建导出任务失败: HTTP {}", response.status()));
+        return Err(ApiError {
+            code: -1,
+            msg: format!("创建导出任务失败: HTTP {}", response.status()),
+        });
     }
     
     let result: ApiResponse<ExportTaskResponse> = response
         .json()
         .await
-        .map_err(|e| format!("解析导出任务响应失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("解析导出任务响应失败: {}", e),
+        })?;
     
     if result.code != 0 {
-        return Err(format!("创建导出任务失败: {}", result.msg));
+        return Err(ApiError {
+            code: result.code,
+            msg: format!("创建导出任务失败: {}", result.msg),
+        });
     }
     
     result.data
         .map(|d| d.ticket)
-        .ok_or_else(|| "导出任务响应中缺少ticket".to_string())
+        .ok_or_else(|| ApiError {
+            code: -1,
+            msg: "导出任务响应中缺少ticket".to_string(),
+        })
 }
 
 /**
@@ -602,7 +720,7 @@ async fn get_export_task_status(
     access_token: &str,
     ticket: &str,
     file_token: &str,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, ApiError> {
     print!("get_export_task_status ticket:{}, file_token: {}", ticket, file_token);
     let url = format!(
         "https://open.feishu.cn/open-apis/drive/v1/export_tasks/{}?token={}",
@@ -614,19 +732,31 @@ async fn get_export_task_status(
         .header("Authorization", format!("Bearer {}", access_token))
         .send()
         .await
-        .map_err(|e| format!("查询导出任务状态请求失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("查询导出任务状态请求失败: {}", e),
+        })?;
     
     if !response.status().is_success() {
-        return Err(format!("查询导出任务状态失败: HTTP {}", response.status()));
+        return Err(ApiError {
+            code: -1,
+            msg: format!("查询导出任务状态失败: HTTP {}", response.status()),
+        });
     }
     
     let result: ApiResponse<ExportTaskStatus> = response
         .json()
         .await
-        .map_err(|e| format!("解析导出任务状态响应失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("解析导出任务状态响应失败: {}", e),
+        })?;
     
     if result.code != 0 {
-        return Err(format!("查询导出任务状态失败: {}", result.msg));
+        return Err(ApiError {
+            code: result.code,
+            msg: format!("查询导出任务状态失败: {}", result.msg),
+        });
     }
     
     Ok(result.data
@@ -654,7 +784,7 @@ async fn wait_for_export_task(
     ticket: &str,
     file_token: &str,
     max_retries: u32,
-) -> Result<String, String> {
+) -> Result<String, ApiError> {
     for _ in 0..max_retries {
         if let Some(download_token) = get_export_task_status(client, access_token, ticket, file_token).await? {
             return Ok(download_token);
@@ -664,7 +794,10 @@ async fn wait_for_export_task(
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     }
     
-    Err("导出任务超时".to_string())
+    Err(ApiError {
+        code: -1,
+        msg: "导出任务超时".to_string(),
+    })
 }
 
 /**
@@ -676,7 +809,7 @@ async fn download_file_to_path(
     file_token: &str,
     save_path: &Path,
     is_export_file: bool,
-) -> Result<(), String> {
+) -> Result<(), ApiError> {
     let url = if is_export_file {
         format!(
             "https://open.feishu.cn/open-apis/drive/v1/export_tasks/file/{}/download",
@@ -694,36 +827,57 @@ async fn download_file_to_path(
         .header("Authorization", format!("Bearer {}", access_token))
         .send()
         .await
-        .map_err(|e| format!("下载文件请求失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("下载文件请求失败: {}", e),
+        })?;
     
     if !response.status().is_success() {
-        return Err(format!("下载文件失败: url {},HTTP {}", url, response.status()));
+        return Err(ApiError {
+            code: -1,
+            msg: format!("下载文件失败: url {},HTTP {}", url, response.status()),
+        });
     }
     
     // 确保目录存在
     if let Some(parent) = save_path.parent() {
         tokio::fs::create_dir_all(parent)
             .await
-            .map_err(|e| format!("创建目录失败: {}", e))?;
+            .map_err(|e| ApiError {
+                code: -1,
+                msg: format!("创建目录失败: {}", e),
+            })?;
     }
     
     // 创建文件
     let mut file = tokio::fs::File::create(save_path)
         .await
-        .map_err(|e| format!("创建文件失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("创建文件失败: {}", e),
+        })?;
     
     // 流式下载
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("下载数据块失败: {}", e))?;
+        let chunk = chunk.map_err(|e| ApiError {
+            code: -1,
+            msg: format!("下载数据块失败: {}", e),
+        })?;
         file.write_all(&chunk)
             .await
-            .map_err(|e| format!("写入文件失败: {}", e))?;
+            .map_err(|e| ApiError {
+                code: -1,
+                msg: format!("写入文件失败: {}", e),
+            })?;
     }
     
     file.flush()
         .await
-        .map_err(|e| format!("刷新文件失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("刷新文件失败: {}", e),
+        })?;
     
     Ok(())
 }
@@ -739,30 +893,45 @@ async fn start_download_task_with_resume(
     app_handle: AppHandle,
     state: State<'_, AppState>,
     _is_resume: bool  // 参数保留但不再使用，逻辑已统一
-) -> Result<(), String> {
+) -> Result<(), ApiError> {
     let task_id = task.id.clone();
     
     // 检查任务是否已经在运行
     {
         let active_downloads = state.active_downloads.lock().unwrap();
         if active_downloads.contains_key(&task_id) {
-            return Err("任务已在运行中".to_string());
+            return Err(ApiError {
+                code: -1,
+                msg: "任务已在运行中".to_string(),
+            });
         }
     }
     
     // 从download_files表获取文件列表
     let files = state.db.get_task_files(&task_id).await
-        .map_err(|e| format!("获取任务文件列表失败: {}", e))?;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("获取任务文件列表失败: {}", e),
+        })?;
     
     if files.is_empty() {
-        return Err("任务中没有文件".to_string());
+        return Err(ApiError {
+            code: -1,
+            msg: "任务中没有文件".to_string(),
+        });
     }
     
     // 统计当前状态
     let completed_files = state.db.get_file_count_by_status(&task_id, "completed").await
-        .map_err(|e| format!("获取已完成文件数量失败: {}", e))? as i32;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("获取已完成文件数量失败: {}", e),
+        })? as i32;
     let failed_files = state.db.get_file_count_by_status(&task_id, "failed").await
-        .map_err(|e| format!("获取失败文件数量失败: {}", e))? as i32;
+        .map_err(|e| ApiError {
+            code: -1,
+            msg: format!("获取失败文件数量失败: {}", e),
+        })? as i32;
     
     println!("开始下载任务: {}, 总文件: {}, 已完成: {}, 失败: {}", 
              task_id, files.len(), completed_files, failed_files);
@@ -906,9 +1075,9 @@ async fn start_download_task_with_resume(
                 Err(e) => {
                     failed_files += 1;
                     files_with_status[index]["status"] = serde_json::Value::String("failed".to_string());
-                    files_with_status[index]["errorMessage"] = serde_json::Value::String(e.clone());
-                    let _ = db.update_file_status(&task_id_clone, &file.token, "failed", Some(&e)).await;
-                    println!("文件下载失败: {}, 错误: {}", file.name, e);
+                    files_with_status[index]["errorMessage"] = serde_json::Value::String(e.msg.clone());
+                    let _ = db.update_file_status(&task_id_clone, &file.token, "failed", Some(&e.msg.clone())).await;
+                    println!("文件下载失败: {}, 错误: {}", file.name, e.msg);
                 }
             }
             
@@ -976,7 +1145,7 @@ async fn start_download_task_internal(
     access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>
-) -> Result<(), String> {
+) -> Result<(), ApiError> {
     // 调用支持断点续传的函数，is_resume=false表示新任务
     start_download_task_with_resume(task, access_token, app_handle, state, false).await
 }
@@ -990,13 +1159,19 @@ async fn execute_download_task(
     access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>
-) -> Result<bool, String> {
+) -> Result<bool, ApiError> {
     println!("开始执行下载任务: {}", task_id);
     
     // 获取任务信息
     let task = state.db.get_task(&task_id).await
-        .map_err(|e| format!("获取任务失败: {}", e))?
-        .ok_or_else(|| format!("任务 {} 不存在", task_id))?;
+        .map_err(|e| ApiError{
+            code: -1,
+            msg: format!("获取任务失败: {}", e),
+        })?
+        .ok_or_else(|| ApiError{
+            code: -1,
+            msg: format!("任务 {} 不存在", task_id),
+        })?;
     
     // 使用内部函数启动下载
     start_download_task_internal(task, access_token, app_handle, state).await?;
@@ -1013,7 +1188,7 @@ async fn retry_download_file(
     file_token: String,
     _access_token: String,
     _state: State<'_, AppState>
-) -> Result<bool, String> {
+) -> Result<bool, ApiError> {
     // 这里应该实现重试下载逻辑
     println!("重试下载文件: {} in task {}", file_token, task_id);
     Ok(true)
@@ -1028,23 +1203,35 @@ async fn start_download_task(
     access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>
-) -> Result<(), String> {
+) -> Result<(), ApiError> {
     println!("开始下载任务: {}", task_id);
     
     // 从数据库获取任务信息
     let task = match state.db.get_task(&task_id).await {
         Ok(Some(task)) => task,
-        Ok(None) => return Err("任务不存在".to_string()),
-        Err(e) => return Err(format!("获取任务失败: {}", e)),
+        Ok(None) => return Err(ApiError{
+            code: -1,
+            msg: "任务不存在".to_string(),
+        }),
+        Err(e) => return Err(ApiError{
+            code: -1,
+            msg: format!("获取任务失败: {}", e),
+        }),
     };
     
     // 检查任务状态
     if task.status == "downloading" {
-        return Err("任务已在下载中".to_string());
+        return Err(ApiError{
+            code: -1,
+            msg: "任务已在下载中".to_string(),
+        });
     }
     
     if task.status == "completed" {
-        return Err("任务已完成".to_string());
+        return Err(ApiError{
+            code: -1,
+            msg: "任务已完成".to_string(),
+        });
     }
     
     start_download_task_internal(task, access_token, app_handle, state).await
@@ -1059,12 +1246,15 @@ async fn resume_downloading_tasks(
     access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>
-) -> Result<String, String> {
+) -> Result<String, ApiError> {
     println!("恢复所有下载中状态的任务");
     
     // 获取所有下载中状态的任务
     let downloading_tasks = state.db.get_downloading_tasks().await
-        .map_err(|e| format!("获取下载中任务失败: {}", e))?;
+        .map_err(|e| ApiError{
+            code: -1,
+            msg: format!("获取下载中任务失败: {}", e),
+        })?;
     
     if downloading_tasks.is_empty() {
         println!("没有下载中状态的任务");
@@ -1107,7 +1297,7 @@ async fn resume_downloading_tasks(
             state.clone(),
             true // is_resume = true
         ).await {
-            println!("恢复任务 {} 失败: {}", task_id, e);
+            println!("恢复任务 {} 失败: {}", task_id, e.msg);
         } else {
             resumed_count += 1;
         }
@@ -1125,26 +1315,38 @@ async fn resume_paused_task(
     access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>
-) -> Result<(), String> {
+) -> Result<(), ApiError> {
     println!("手动恢复暂停的任务: {}", task_id);
     
     // 从数据库获取任务信息
     let task = match state.db.get_task(&task_id).await {
         Ok(Some(task)) => task,
-        Ok(None) => return Err("任务不存在".to_string()),
-        Err(e) => return Err(format!("获取任务失败: {}", e)),
+        Ok(None) => return Err(ApiError{
+            code: -1,
+            msg: "任务不存在".to_string(),
+        }),
+        Err(e) => return Err(ApiError{
+            code: -1,
+            msg: format!("获取任务失败: {}", e),
+        }),
     };
     
     // 检查任务状态
     if task.status != "paused" {
-        return Err("只能恢复暂停状态的任务".to_string());
+        return Err(ApiError{
+            code: -1,
+            msg: "只能恢复暂停状态的任务".to_string(),
+        });
     }
     
     // 检查任务是否已经在运行
     {
         let active_downloads = state.active_downloads.lock().unwrap();
         if active_downloads.contains_key(&task_id) {
-            return Err("任务已在运行中".to_string());
+            return Err(ApiError{
+                code: -1,
+                msg: "任务已在运行中".to_string(),
+            });
         }
     }
     
@@ -1165,7 +1367,7 @@ async fn resume_paused_task(
 async fn stop_download_task(
     task_id: String,
     state: State<'_, AppState>
-) -> Result<bool, String> {
+) -> Result<bool, ApiError> {
     println!("停止下载任务: {}", task_id);
     
     // 获取并移除任务句柄
@@ -1184,7 +1386,10 @@ async fn stop_download_task(
         println!("下载任务已暂停: {}", task_id);
         Ok(true)
     } else {
-        Err(format!("任务 {} 不在运行中", task_id))
+        Err(ApiError{
+            code: -1,
+            msg: format!("任务 {} 不在运行中", task_id),
+        })
     }
 }
 

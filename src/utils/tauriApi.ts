@@ -103,9 +103,10 @@ export class TauriApi {
     try {
       return await apiCall(currentToken);
     } catch (error: any) {
+      console.log('API调用错误:', error);
       // 检查是否是401错误或包含认证失败的信息
       const is401Error = 
-        (error?.code === 401) ||
+        (error?.code === 99991677) ||
         (error?.response?.status === 401) ||
         (error?.message && error.message.includes('401')) ||
         (error?.msg && (error.msg.includes('token') || error.msg.includes('unauthorized')));
