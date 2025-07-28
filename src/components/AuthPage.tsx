@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Typography, message } from 'antd';
+import { Card, Typography, App } from 'antd';
 import { tauriApi } from '../utils/tauriApi'; 
 import { openUrl} from '@tauri-apps/plugin-opener'
 import { start, cancel, onUrl } from '@fabianlars/tauri-plugin-oauth';
@@ -28,6 +28,7 @@ interface AuthData {
  * 适配Tauri版本
  */
 const AuthPage: React.FC<{ onAuth: (token: string) => void }> = ({ onAuth }) => {
+  const { message } = App.useApp();
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const qrContainerRef = useRef<HTMLDivElement>(null);
   const messageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);

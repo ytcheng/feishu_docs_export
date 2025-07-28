@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Card, Table, Progress, Space, Button, Tag, message, Popconfirm, Typography, Spin, Tooltip } from 'antd';
+import { Card, Table, Progress, Space, Button, Tag, Popconfirm, Typography, Spin, Tooltip, App } from 'antd';
 import { DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, ArrowLeftOutlined, StopOutlined } from '@ant-design/icons';
 import { DownloadTask, DownloadFile } from '../types';
 import { tauriApi } from '../utils/tauriApi';
@@ -85,6 +85,7 @@ interface TaskListPageProps {
  * 下载任务列表页面组件
  */
 const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
+  const { message } = App.useApp();
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);

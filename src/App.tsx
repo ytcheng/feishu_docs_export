@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Avatar, Dropdown, Typography, Space } from 'antd';
+import { Layout, Avatar, Dropdown, Typography, Space, ConfigProvider, App as AntdApp } from 'antd';
 import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import AuthPage from './components/AuthPage';
 import HomePage from './components/HomePage';
@@ -113,9 +113,13 @@ const App: React.FC = () => {
 
   if (!authed) {
     return (
-      <ErrorBoundary>
-        <AuthPage onAuth={handleAuth} />
-      </ErrorBoundary>
+      <ConfigProvider>
+        <AntdApp>
+          <ErrorBoundary>
+            <AuthPage onAuth={handleAuth} />
+          </ErrorBoundary>
+        </AntdApp>
+      </ConfigProvider>
     );
   }
 
@@ -132,38 +136,42 @@ const App: React.FC = () => {
   ];
 
   return (
-    <Layout style={{ height: '100vh' }}>
-      <Header style={{ 
-        background: '#fff', 
-        borderBottom: '1px solid #eee', 
-        padding: '0 24px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <div style={{ fontWeight: 'bold', fontSize: 18 }}>飞书文档导出助手</div>
-        {userInfo && (
-          <Dropdown
-            menu={{ items: userMenuItems }}
-            placement="bottomRight"
-            trigger={['hover']}
-          >
-            <Space style={{ cursor: 'pointer' }}>
-              <Avatar 
-                src={userInfo.avatar_thumb || userInfo.avatar_url} 
-                icon={<UserOutlined />}
-                size={32}
-              />
-              <Text>{userInfo.name}</Text>
-            </Space>
-          </Dropdown>
-        )}
-      </Header>
-      <Content style={{ padding: '24px', minHeight: 'calc(100vh - 64px)' }}>
-        {currentPage === 'home' && <HomePage onViewTasks={() => setCurrentPage('list')} />}
-        {currentPage === 'list' && <TaskListPage onGoBack={() => setCurrentPage('home')} />}
-      </Content>
-    </Layout>
+    <ConfigProvider>
+      <AntdApp>
+        <Layout style={{ height: '100vh' }}>
+          <Header style={{ 
+            background: '#fff', 
+            borderBottom: '1px solid #eee', 
+            padding: '0 24px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <div style={{ fontWeight: 'bold', fontSize: 18 }}>飞书文档导出助手</div>
+            {userInfo && (
+              <Dropdown
+                menu={{ items: userMenuItems }}
+                placement="bottomRight"
+                trigger={['hover']}
+              >
+                <Space style={{ cursor: 'pointer' }}>
+                  <Avatar 
+                    src={userInfo.avatar_thumb || userInfo.avatar_url} 
+                    icon={<UserOutlined />}
+                    size={32}
+                  />
+                  <Text>{userInfo.name}</Text>
+                </Space>
+              </Dropdown>
+            )}
+          </Header>
+          <Content style={{ padding: '24px', minHeight: 'calc(100vh - 64px)' }}>
+            {currentPage === 'home' && <HomePage onViewTasks={() => setCurrentPage('list')} />}
+            {currentPage === 'list' && <TaskListPage onGoBack={() => setCurrentPage('home')} />}
+          </Content>
+        </Layout>
+      </AntdApp>
+    </ConfigProvider>
   );
 };
 

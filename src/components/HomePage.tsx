@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import 'antd/dist/reset.css'; 
-import { Card, Tree, Button, Space, message, Spin } from 'antd';
+import { Card, Tree, Button, Space, Spin, App } from 'antd';
 import { 
   DownloadOutlined, 
   FolderOutlined, 
@@ -141,6 +141,7 @@ interface HomePageProps {
 }
 
 const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
+  const { message } = App.useApp();
   const [treeData, setTreeData] = useState<TreeNode[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
