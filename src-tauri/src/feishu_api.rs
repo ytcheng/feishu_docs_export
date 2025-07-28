@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use tauri::State;
-use crate::{config::{FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_REDIRECT_URI}, types::{ApiError, ApiResponse, AppState, FeishuFilesPagination, FeishuFile, FeishuWikiNode, FeishuWikiNodesPagination, FeishuWikiSpacesPagination, FeishuWikiSpace, RootFolderMeta, TokenInfo, UserInfo}};
+use crate::{config::{FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_REDIRECT_URI}, types::{ApiError, ApiResponse, AppState, FeishuFilesPagination, FeishuFile, FeishuWikiNode, FeishuWikiNodesPagination, FeishuWikiSpacesPagination, FeishuWikiSpace, FeishuRootMeta, TokenInfo, UserInfo}};
 
 
 pub const FEISHU_ENDPOINT: &str = "https://open.feishu.cn/open-apis";
@@ -108,7 +108,7 @@ pub async fn refresh_access_token(refresh_token: String, state: State<'_, AppSta
  * 获取根文件夹元数据
  * 根据飞书API文档: https://open.feishu.cn/document/server-docs/docs/drive-v1/folder/get-root-folder-meta
  */
-pub async fn root_folder_meta(access_token: String, state: State<'_, AppState>) -> Result<RootFolderMeta, ApiError> {
+pub async fn root_folder_meta(access_token: String, state: State<'_, AppState>) -> Result<FeishuRootMeta, ApiError> {
     let client = &state.http_client;
     
     let response = client
@@ -121,7 +121,7 @@ pub async fn root_folder_meta(access_token: String, state: State<'_, AppState>) 
             msg: format!("请求失败: {}", e),
         })?;
     
-    let result: ApiResponse<RootFolderMeta> = response
+    let result: ApiResponse<FeishuRootMeta> = response
         .json()
         .await
         .map_err(|e| ApiError {

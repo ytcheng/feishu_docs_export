@@ -1,3 +1,47 @@
+export type NodeType = 'FeishuWikiRoot' | 'FeishuWikiSpace' | 'FeishuWikiNode' | 'FeishuFile' | 'FeishuFolder' | 'FeishuRootMeta';
+export type FileItem = FeishuWikiRoot | FeishuWikiSpace | FeishuWikiNode | FeishuFile | FeishuFolder | FeishuRootMeta;
+export interface BaseTreeNode {
+  title: string;
+  key: string;
+  icon?: React.ReactNode;
+  type: NodeType;
+  isLeaf?: boolean;
+  children?: TreeNode[];
+  fileItem: FileItem;
+  loadChildren: (accessToken?: string) => Promise<TreeNode[]>;
+}
+export interface FeishuWikiRootTreeNode extends BaseTreeNode {
+  type: 'FeishuWikiRoot';
+  fileItem: FeishuWikiRoot;
+}
+export interface FeishuWikiSpaceTreeNode extends BaseTreeNode {
+  type: 'FeishuWikiSpace';
+  fileItem: FeishuWikiSpace;
+}
+export interface FeishuWikiTreeNode extends BaseTreeNode {
+  type: 'FeishuWikiNode';
+  fileItem: FeishuWikiNode;
+}
+export interface FeishuFileTreeNode extends BaseTreeNode {
+  type: 'FeishuFile';
+  fileItem: FeishuFile;
+}
+export interface FeishuFolderTreeNode extends BaseTreeNode {
+  type: 'FeishuFolder';
+  fileItem: FeishuFolder;
+}
+export interface FeishuRootMetaTreeNode extends BaseTreeNode {
+  type: 'FeishuRootMeta';
+  fileItem: FeishuRootMeta;
+}
+
+export type TreeNode =
+  | FeishuWikiRootTreeNode
+  | FeishuWikiSpaceTreeNode
+  | FeishuWikiTreeNode
+  | FeishuFileTreeNode
+  | FeishuFolderTreeNode
+  | FeishuRootMetaTreeNode;
 /**
  * 下载进度事件
  */
@@ -44,6 +88,13 @@ export interface DownloadTask {
   sourceType: 'drive' | 'wiki';
   sourceId?: string;
   files?: DownloadFile[];
+  selectedNodes?: TreeNode[];
+}
+export interface DownloadTaskRequest{
+  name: string;
+  description?: string;
+  outputPath: string;
+  selectedNodes?: TreeNode[];
 }
 
 /**

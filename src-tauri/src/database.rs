@@ -41,7 +41,7 @@ impl Database {
                 output_path TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                source_type TEXT NOT NULL
+                selected_nodes TEXT NOT NULL
             )
             "#,
         )
@@ -79,7 +79,7 @@ impl Database {
             INSERT INTO download_tasks (
                 id, name, description, status, progress, total_files, 
                 downloaded_files, failed_files, output_path, created_at, 
-                updated_at, source_type
+                updated_at, selected_nodes
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
@@ -94,7 +94,7 @@ impl Database {
         .bind(&task.output_path)
         .bind(&task.created_at)
         .bind(&task.updated_at)
-        .bind(&task.source_type)
+        .bind(&task.selected_nodes)
         .execute(&self.pool)
         .await?;
 
@@ -125,8 +125,8 @@ impl Database {
                 output_path: row.get("output_path"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
-                source_type: row.get("source_type"),
                 files: Some(files),
+                selected_nodes: row.get("selected_nodes"),
             }))
         } else {
             Ok(None)
@@ -157,8 +157,8 @@ impl Database {
                 output_path: row.get("output_path"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
-                source_type: row.get("source_type"),
                 files: Some(files),
+                selected_nodes: row.get("selected_nodes"),
             });
         }
         Ok(tasks)
@@ -170,7 +170,7 @@ impl Database {
             UPDATE download_tasks SET 
                 name = ?, description = ?, status = ?, progress = ?, 
                 total_files = ?, downloaded_files = ?, failed_files = ?, 
-                output_path = ?, updated_at = ?, source_type = ?
+                output_path = ?, updated_at = ?
             WHERE id = ?
             "#,
         )
@@ -183,7 +183,6 @@ impl Database {
         .bind(task.failed_files)
         .bind(&task.output_path)
         .bind(&task.updated_at)
-        .bind(&task.source_type)
         .bind(&task.id)
         .execute(&self.pool)
         .await?;
@@ -205,15 +204,17 @@ impl Database {
         progress: f64,
         downloaded_files: i32,
         failed_files: i32,
+        total_files: i32,
     ) -> Result<(), sqlx::Error> {
         let now = chrono::Utc::now().to_rfc3339();
         
         sqlx::query(
-            "UPDATE download_tasks SET progress = ?, downloaded_files = ?, failed_files = ?, updated_at = ? WHERE id = ?"
+            "UPDATE download_tasks SET progress = ?, downloaded_files = ?, failed_files = ?, total_files = ?, updated_at = ? WHERE id = ?"
         )
         .bind(progress)
         .bind(downloaded_files)
         .bind(failed_files)
+        .bind(total_files)
         .bind(&now)
         .bind(task_id)
         .execute(&self.pool)
@@ -244,9 +245,9 @@ impl Database {
     /**
      * 获取正在下载的任务列表（排除当前正在运行的任务）
      */
-    pub async fn get_downloading_tasks(&self) -> Result<Vec<DownloadTask>, sqlx::Error> {
+    pub async fn get_autoresume_tasks(&self) -> Result<Vec<DownloadTask>, sqlx::Error> {
         let rows = sqlx::query(
-            "SELECT * FROM download_tasks WHERE status = 'downloading' ORDER BY created_at ASC"
+            "SELECT * FROM download_tasks WHERE status = 'downloading' or status = 'pending' or status = 'ready' ORDER BY created_at ASC"
         )
         .fetch_all(&self.pool)
         .await?;
@@ -268,8 +269,8 @@ impl Database {
                 output_path: row.get("output_path"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
-                source_type: row.get("source_type"),
                 files: Some(files),
+                selected_nodes: row.get("selected_nodes"),
             });
         }
 
@@ -303,8 +304,8 @@ impl Database {
                 output_path: row.get("output_path"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
-                source_type: row.get("source_type"),
                 files: Some(files),
+                selected_nodes: row.get("selected_nodes"),
             });
         }
 
@@ -339,8 +340,8 @@ impl Database {
                 output_path: row.get("output_path"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
-                source_type: row.get("source_type"),
                 files: Some(files),
+                selected_nodes: row.get("selected_nodes"),
             });
         }
 

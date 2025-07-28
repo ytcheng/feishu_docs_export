@@ -1,9 +1,9 @@
 use tauri::State;
 use crate::feishu_api;
-use crate::types::{ApiError, AppState, RootFolderMeta, FeishuFile, FeishuWikiSpace,FeishuWikiNode};
+use crate::types::{ApiError, AppState, FeishuRootMeta, FeishuFile, FeishuWikiSpace,FeishuWikiNode};
 
 #[tauri::command]
-pub async fn get_root_folder_meta(access_token: String, state: State<'_, AppState>) -> Result<RootFolderMeta, ApiError> {
+pub async fn get_root_folder_meta(access_token: String, state: State<'_, AppState>) -> Result<FeishuRootMeta, ApiError> {
     let folder_meta = feishu_api::root_folder_meta(access_token, state).await?;
     Ok(folder_meta)
 }

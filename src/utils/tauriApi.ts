@@ -13,6 +13,7 @@ import type {
   DownloadCompleteEvent,
   DownloadErrorEvent,
   FeishuRootMeta,
+  DownloadTaskRequest,
 } from '../types';
 
 /**
@@ -233,7 +234,7 @@ export class TauriApi {
    * 创建下载任务
    * @param task 下载任务信息
    */
-  async createDownloadTask(task: Omit<DownloadTask, 'id' | 'createdAt' | 'updatedAt'>): Promise<DownloadTask> {
+  async createDownloadTask(task: Omit<DownloadTaskRequest, 'id' | 'createdAt' | 'updatedAt'>): Promise<DownloadTask> {
     const result = await invoke('create_download_task', { taskRequest: task }) as any;
     // 转换 Rust 的 snake_case 字段名为 TypeScript 的 camelCase
     return {

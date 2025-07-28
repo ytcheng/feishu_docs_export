@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import 'antd/dist/reset.css'; 
 import { Card, Tree, Button, Space, message, Spin } from 'antd';
 import { 
   DownloadOutlined, 
@@ -9,34 +10,18 @@ import {
   TableOutlined,
   DatabaseOutlined,
   PaperClipOutlined,
-  FileOutlined,
   FolderOpenOutlined,
   CloudOutlined
 } from '@ant-design/icons';
 import { open } from '@tauri-apps/plugin-dialog';
 import { tauriApi } from '../utils/tauriApi';
-import type { DownloadTask, DownloadFile, FeishuWikiRoot, FeishuWikiSpace, FeishuWikiNode, FeishuFile, FeishuFolder, FeishuRootMeta } from '../types';
+import type { DownloadTask, FeishuWikiRoot, FeishuWikiSpace, FeishuWikiNode, FeishuFile, FeishuFolder, FeishuRootMeta, DownloadTaskRequest, FeishuWikiRootTreeNode, FeishuWikiSpaceTreeNode, FeishuWikiTreeNode, FeishuFileTreeNode, FeishuFolderTreeNode, FeishuRootMetaTreeNode, TreeNode } from '../types';
 
-type NodeType = 'FeishuWikiRoot' | 'FeishuWikiSpace' | 'FeishuWikiNode' | 'FeishuFile' | 'FeishuFolder' | 'FeishuRootMeta';
-type FileItem = FeishuWikiRoot | FeishuWikiSpace | FeishuWikiNode | FeishuFile | FeishuFolder | FeishuRootMeta;
+
 const iconStyle = {
   fontSize: '16px'
 };
-interface BaseTreeNode {
-  title: string;
-  key: string;
-  icon?:  React.ReactNode;
-  type: NodeType;
-  isLeaf?: boolean;
-  children?: TreeNode[]; 
-  fileItem: FileItem;
-  loadChildren: (accessToken?: string) => Promise<TreeNode[]>;
-}
 
-interface FeishuWikiRootTreeNode extends BaseTreeNode {
-  type: 'FeishuWikiRoot';
-  fileItem: FeishuWikiRoot;
-}
 function createWikiRootTreeNode(fileItem: FeishuWikiRoot): FeishuWikiRootTreeNode {
   return {
     title: "知识库",
@@ -51,12 +36,6 @@ function createWikiRootTreeNode(fileItem: FeishuWikiRoot): FeishuWikiRootTreeNod
     }
   };
 }
-
-
-interface FeishuWikiSpaceTreeNode extends BaseTreeNode {
-  type: 'FeishuWikiSpace';
-  fileItem: FeishuWikiSpace;
-}
 function createWikiSpaceTreeNode(fileItem: FeishuWikiSpace): FeishuWikiSpaceTreeNode {
   return {
     title: fileItem.name,
@@ -70,11 +49,6 @@ function createWikiSpaceTreeNode(fileItem: FeishuWikiSpace): FeishuWikiSpaceTree
       return nodes.map(createWikiNodeTreeNode);
     }
   };
-}
-
-interface FeishuWikiTreeNode extends BaseTreeNode {
-  type: 'FeishuWikiNode';
-  fileItem: FeishuWikiNode;
 }
 function createWikiNodeTreeNode(fileItem: FeishuWikiNode): FeishuWikiTreeNode {
   return {
@@ -93,11 +67,6 @@ function createWikiNodeTreeNode(fileItem: FeishuWikiNode): FeishuWikiTreeNode {
     }
   };
 }
-
-interface FeishuFileTreeNode extends BaseTreeNode {
-  type: 'FeishuFile';
-  fileItem: FeishuFile;
-}
 function createFileTreeNode(fileItem: FeishuFile): FeishuFileTreeNode {
   let icon = <PaperClipOutlined style={{ ...iconStyle, color: '#fa541c' }} />;
   switch (fileItem.type) {
@@ -112,7 +81,6 @@ function createFileTreeNode(fileItem: FeishuFile): FeishuFileTreeNode {
       icon = <DatabaseOutlined style={{ ...iconStyle, color: '#722ed1' }} />;
       break;
   }
-  console.log(fileItem);
   return {
     title: fileItem.name === '' ? "未命名文件" : fileItem.name,
     key: fileItem.token,
@@ -122,11 +90,6 @@ function createFileTreeNode(fileItem: FeishuFile): FeishuFileTreeNode {
     isLeaf: true,
     loadChildren: async (_accessToken?: string) => [],
   };
-}
-
-interface FeishuFolderTreeNode extends BaseTreeNode {
-  type: 'FeishuFolder';
-  fileItem: FeishuFolder;
 }
 function createFolderTreeNode(fileItem: FeishuFolder): FeishuFolderTreeNode {
   return {
@@ -147,11 +110,6 @@ function createFolderTreeNode(fileItem: FeishuFolder): FeishuFolderTreeNode {
     }
   };
 }
-
-interface FeishuRootMetaTreeNode extends BaseTreeNode {
-  type: 'FeishuRootMeta';
-  fileItem: FeishuRootMeta;
-}
 function createRootMetaTreeNode(fileItem: FeishuRootMeta): FeishuRootMetaTreeNode {
   return {
     title: "云盘",
@@ -171,13 +129,6 @@ function createRootMetaTreeNode(fileItem: FeishuRootMeta): FeishuRootMetaTreeNod
     }
   };
 }
-type TreeNode =
-  | FeishuWikiRootTreeNode
-  | FeishuWikiSpaceTreeNode
-  | FeishuWikiTreeNode
-  | FeishuFileTreeNode
-  | FeishuFolderTreeNode
-  | FeishuRootMetaTreeNode;
 
 interface HomePageProps {
   onViewTasks: () => void;
@@ -402,22 +353,21 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
   /**
    * 根据选中的节点获取所有需要下载的文件
    */
-  const getSelectedFiles = async (): Promise<Array<FileItem & { fullPath: string }>> => {
-    return [];
-    // const allFiles: Array<FileItem & { fullPath: string }> = [];
+  const getSelectedNodes = async (): Promise<Array<TreeNode>> => {
+    const allNodes: Array<TreeNode> = [];
     
-    // const findNodeByKey = (nodes: TreeNode[], key: string): TreeNode | null => {
-    //   for (const node of nodes) {
-    //     if (node.key === key) {
-    //       return node;
-    //     }
-    //     if (node.children) {
-    //       const found = findNodeByKey(node.children, key);
-    //       if (found) return found;
-    //     }
-    //   }
-    //   return null;
-    // };
+    const findNodeByKey = (nodes: TreeNode[], key: string): TreeNode | null => {
+      for (const node of nodes) {
+        if (node.key === key) {
+          return node;
+        }
+        if (node.children) {
+          const found = findNodeByKey(node.children, key);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
     
     // const getNodePath = (nodes: TreeNode[], targetKey: string, currentPath: string[] = []): string[] | null => {
     //   for (const node of nodes) {
@@ -436,10 +386,12 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
     //   return null;
     // };
     
-    // for (const key of selectedKeys) {
-    //   const node = findNodeByKey(treeData, key);
-    //   if (!node) continue;
-      
+    for (const key of selectedKeys) {
+      const node = findNodeByKey(treeData, key);
+      if (!node) continue;
+      allNodes.push(node!);
+    }
+    return allNodes;
     //   const fileItem = node.fileItem;
     //   const nodePath = getNodePath(treeData, key);
     //   const pathFromRoot = nodePath ? nodePath.slice(0, -1) : [];
@@ -483,52 +435,41 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
       setCreating(true);
       message.info('正在分析选中的文件，请稍候...');
       
-      const filesToDownload = await getSelectedFiles();
+      const nodesToDownload = await getSelectedNodes();
       
-      if (filesToDownload.length === 0) {
+      if (nodesToDownload.length === 0) {
         message.warning('未找到可下载的文件');
         return;
       }
       
-      // const downloadFiles: DownloadFile[] = filesToDownload.map(file => {
-      //   let actualType: DownloadFile['type'] = file.type;
-      //   let actualToken: string = file.token;
+      // const downloadFiles: TreeNode[] = nodesToDownload.map(node => {
+      //   // let actualType: DownloadFile['type'] = file.type;
+      //   // let actualToken: string = file.token;
         
-      //   if (file.type === 'wiki_node' && file.obj_type) {
-      //     const validTypes: DownloadFile['type'][] = ['doc', 'docx', 'sheet', 'bitable', 'file'];
-      //     actualType = validTypes.includes(file.obj_type as DownloadFile['type']) 
-      //       ? (file.obj_type as DownloadFile['type']) 
-      //       : 'doc';
-      //     actualToken = file.obj_token || file.token;
-      //   }
+      //   // if (file.type === 'wiki_node' && file.obj_type) {
+      //   //   const validTypes: DownloadFile['type'][] = ['doc', 'docx', 'sheet', 'bitable', 'file'];
+      //   //   actualType = validTypes.includes(file.obj_type as DownloadFile['type']) 
+      //   //     ? (file.obj_type as DownloadFile['type']) 
+      //   //     : 'doc';
+      //   //   actualToken = file.obj_token || file.token;
+      //   // }
         
       //   return {
-      //     token: actualToken,
-      //     name: file.name || '未命名文件',
-      //     type: actualType,
-      //     spaceId: file.space_id,
-      //     relativePath: file.fullPath,
-      //     status: 'pending' as const,
-      //     progress: 0
+      //     type: node.type,
+      //     data: node
       //   };
       // });
-      const downloadFiles: DownloadFile[] = [];
-      const task: Omit<DownloadTask, 'id' | 'createdAt' | 'updatedAt'> = {
+      // const downloadFiles: SelectedNode[] = [];
+      const task: Omit<DownloadTaskRequest, 'id' | 'createdAt' | 'updatedAt'> = {
         name: `导出任务 - ${new Date().toLocaleString()}`,
-        status: 'pending',
-        progress: 0,
-        totalFiles: downloadFiles.length,
-        downloadedFiles: 0,
-        failedFiles: 0,
         outputPath: selected,
-        sourceType: 'drive',
-        files: downloadFiles
+        selectedNodes: nodesToDownload
       };
     
       const result = await tauriApi.createDownloadTask(task);
       const taskId = typeof result === 'string' ? result : result.id;
       
-      message.success(`成功创建导出任务，共 ${filesToDownload.length} 个文件`);
+      message.success(`成功创建导出任务，共 ${nodesToDownload.length} 个文件`);
       setSelectedKeys([]);
       
       // 自动开始下载任务
