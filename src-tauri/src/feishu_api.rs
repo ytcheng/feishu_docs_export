@@ -73,8 +73,8 @@ pub async fn refresh_access_token(refresh_token: String, state: State<'_, AppSta
     
     let mut params = HashMap::new();
     params.insert("grant_type", "refresh_token");
-    params.insert("client_id", FEISHU_APP_ID);
-    params.insert("client_secret", FEISHU_APP_SECRET);
+    params.insert("app_id", FEISHU_APP_ID);
+    params.insert("app_secret", FEISHU_APP_SECRET);
     params.insert("refresh_token", &refresh_token);
     
     let response = client
