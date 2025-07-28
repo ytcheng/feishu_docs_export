@@ -284,35 +284,37 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
       message.success(`成功创建导出任务，共 ${nodesToDownload.length} 个文件`);
       setSelectedKeys([]);
       
-      // 自动开始下载任务
-      try {
-        const accessToken = localStorage.getItem('feishu_access_token');
-        if (accessToken) {
-          message.info('正在开始导出任务...');
-          await tauriApi.executeDownloadTask(taskId, accessToken);
-          message.success('导出任务已开始');
-          loadTasks(); // 刷新任务列表
-        } else {
-          message.warning('未找到访问令牌，请手动开始导出任务');
-        }
-      } catch (executeError) {
-        console.error('自动开始导出任务失败:', executeError);
-        let errorMessage = '自动开始导出失败，请手动开始';
-        if (executeError && typeof executeError === 'object') {
-          if ('response' in executeError && executeError.response && 
-              typeof executeError.response === 'object' && 'data' in executeError.response &&
-              executeError.response.data && typeof executeError.response.data === 'object' && 
-              'msg' in executeError.response.data) {
-            errorMessage = `自动开始导出失败: ${executeError.response.data.msg}`;
-          } else if ('data' in executeError && executeError.data && typeof executeError.data === 'object' && 'msg' in executeError.data) {
-            errorMessage = `自动开始导出失败: ${executeError.data.msg}`;
-          } else if ('message' in executeError) {
-            errorMessage = `自动开始导出失败: ${executeError.message}`;
-          }
-        } else if (typeof executeError === 'string') {
-          errorMessage = `自动开始导出失败: ${executeError}`;
-        }
-        message.warning(errorMessage);
+      // 自动开始下载任务（异步执行，不阻塞界面）
+      const accessToken = localStorage.getItem('feishu_access_token');
+      if (accessToken) {
+        message.success('导出任务已创建，正在后台开始执行...');
+        // 异步执行下载任务，不等待响应
+        tauriApi.executeDownloadTask(taskId, accessToken)
+          .then(() => {
+            console.log('下载任务启动成功');
+            loadTasks(); // 刷新任务列表
+          })
+          .catch((executeError) => {
+            console.error('自动开始导出任务失败:', executeError);
+            let errorMessage = '自动开始导出失败，请手动开始';
+            if (executeError && typeof executeError === 'object') {
+              if ('response' in executeError && executeError.response && 
+                  typeof executeError.response === 'object' && 'data' in executeError.response &&
+                  executeError.response.data && typeof executeError.response.data === 'object' && 
+                  'msg' in executeError.response.data) {
+                errorMessage = `自动开始导出失败: ${executeError.response.data.msg}`;
+              } else if ('data' in executeError && executeError.data && typeof executeError.data === 'object' && 'msg' in executeError.data) {
+                errorMessage = `自动开始导出失败: ${executeError.data.msg}`;
+              } else if ('message' in executeError) {
+                errorMessage = `自动开始导出失败: ${executeError.message}`;
+              }
+            } else if (typeof executeError === 'string') {
+              errorMessage = `自动开始导出失败: ${executeError}`;
+            }
+            message.warning(errorMessage);
+          });
+      } else {
+        message.warning('未找到访问令牌，请手动开始导出任务');
       }
       
     } catch (error) {

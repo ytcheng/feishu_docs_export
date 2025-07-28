@@ -195,8 +195,14 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
       } else {
         // 其他状态的任务使用普通下载API
         message.info('任务开始下载，请稍候...');
-        await tauriApi.executeDownloadTask(taskId, access_token);
-        message.success('任务开始下载');
+        tauriApi.executeDownloadTask(taskId, access_token)
+          .then(() => {
+            message.success('任务开始下载');
+          })
+          .catch((error) => {
+            console.error('开始下载失败:', error);
+            message.error('开始下载失败');
+          });
       }
       
       loadTasks(); // 重新加载任务列表
@@ -296,8 +302,13 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         const access_token = localStorage.getItem('feishu_access_token');
         if (access_token) {
           message.info(`正在恢复下载任务: ${data.taskName}`);
-          await tauriApi.executeDownloadTask(data.taskId, access_token);
-          updateTasksSilently(); // 静默更新任务列表
+          tauriApi.executeDownloadTask(data.taskId, access_token)
+            .then(() => {
+              updateTasksSilently(); // 静默更新任务列表
+            })
+            .catch((error) => {
+              console.error('自动恢复下载任务失败:', error);
+            });
         }
       } catch (error) {
         console.error('自动恢复下载任务失败:', error);
@@ -426,15 +437,6 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         width: '8%',
        render: (_: any, record: DownloadTask) => (
          <Space>
-           {record.status === 'pending' && (
-              <Button
-                icon={<PlayCircleOutlined />}
-                size="small"
-                type="primary"
-                onClick={() => handleStartDownload(record.id)}
-                title="开始下载"
-              />
-            )}
             {record.status === 'downloading' && (
               <Button
                 icon={<StopOutlined />}
