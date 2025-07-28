@@ -422,7 +422,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
        width: '8%',
        render: (status: string) => {
          const statusConfig = {
-           pending: { color: 'default', text: '待下载' },
+           pending: { color: 'default', text: '准备中' },
            downloading: { color: 'processing', text: '下载中' },
            completed: { color: 'success', text: '已完成' },
            failed: { color: 'error', text: '失败' },

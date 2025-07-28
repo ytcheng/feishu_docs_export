@@ -420,7 +420,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
       if (text) {
         text += ` +${pendingTasks.length}等待`;
       } else {
-        text = `${pendingTasks.length}个任务等待中`;
+        text = `${pendingTasks.length}个任务等待中，正获取下载文件列表`;
         status = 'pending';
       }
       totalCount += pendingTasks.length;
