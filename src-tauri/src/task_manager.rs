@@ -5,25 +5,26 @@ use reqwest::Client;
 use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 use chrono;
+use std::path::PathBuf;
+
 
 use crate::types::{
     ApiError, DownloadTask, CreateDownloadTaskRequest, FileInfo, 
     ExportTaskRequest, ExportTaskResponse, ExportTaskStatus, 
-    DownloadProgress, ApiResponse, AppState, FeishuTreeNode
+    DownloadProgress, ApiResponse, AppState, FeishuTreeNode, FeishuTreeNodeWrapper, FeishuFolder, FeishuFile,
 };
 
 /// 递归发现文件的函数
 /// 根据飞书节点类型递归获取所有文件信息
 fn discover_files_recursive<'a>(
-    node: &'a FeishuTreeNode,
+    node: &'a FeishuTreeNodeWrapper,
     access_token: &'a str,
-    state: &'a State<'a, AppState>,
-    current_path: &'a str,
+    state: &'a State<'a, AppState>
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<FileInfo>, ApiError>> + Send + 'a>> {
     Box::pin(async move {
         let mut files = Vec::new();
         
-        match node {
+        match &node.node {
             FeishuTreeNode::FeishuRootMeta(root) => {
                 // 根目录，获取其下的所有文件
                 let drive_files = crate::feishu_api::drive_files(
@@ -44,26 +45,28 @@ fn discover_files_recursive<'a>(
                                 created_time: file.created_time.clone(),
                                 modified_time: file.modified_time.clone(),
                             });
-                            let folder_path = if current_path.is_empty() {
-                                file.name.clone()
-                            } else {
-                                format!("{}/{}", current_path, file.name)
-                            };
+                            let mut folder_path = node.path.clone();
+                            folder_path.push(root.name.as_ref().unwrap().clone());
                             let mut folder_files = discover_files_recursive(
-                                &folder_node,
+                                &FeishuTreeNodeWrapper {
+                                    path: folder_path,
+                                    node: folder_node,
+                                },
                                 access_token,
-                                state,
-                                &folder_path
+                                state
                             ).await?;
                             files.append(&mut folder_files);
                         }
                         _ => {
                             // 普通文件
+                            let mut folder_path = node.path.clone();
+                            folder_path.push(root.name.as_ref().unwrap().clone());
+                            let path: PathBuf = folder_path.iter().collect();
                             files.push(FileInfo {
                                 token: file.token,
                                 name: file.name,
                                 file_type: file.file_type,
-                                relative_path: current_path.to_string(),
+                                relative_path: path,
                                 space_id: None,
                                 status: "pending".to_string(),
                                 error: None,
@@ -73,16 +76,32 @@ fn discover_files_recursive<'a>(
                 }
             }
             FeishuTreeNode::FeishuFile(file) => {
-                // 单个文件
-                files.push(FileInfo {
-                    token: file.token.clone(),
-                    name: file.name.clone(),
-                    file_type: file.file_type.clone(),
-                    relative_path: current_path.to_string(),
-                    space_id: None,
-                    status: "pending".to_string(),
-                    error: None,
-                });
+                let folder_path = node.path.clone();
+                let path: PathBuf = folder_path.iter().collect();
+                //快捷方式
+                if file.file_type == "shortcut" {
+                    files.push(FileInfo {
+                        token: file.shortcut_info.as_ref().unwrap().target_token.clone(),
+                        name: file.name.clone(),
+                        file_type: file.shortcut_info.as_ref().unwrap().target_type.clone(),
+                        relative_path: path,
+                        space_id: None,
+                        status: "pending".to_string(),
+                        error: None,
+                    });
+                //普通文件
+                }else{
+                    files.push(FileInfo {
+                        token: file.token.clone(),
+                        name: file.name.clone(),
+                        file_type: file.file_type.clone(),
+                        relative_path: path,
+                        space_id: None,
+                        status: "pending".to_string(),
+                        error: None,
+                    });
+                }
+                
             }
             FeishuTreeNode::FeishuFolder(folder) => {
                 // 文件夹，获取其下的所有文件
@@ -96,7 +115,7 @@ fn discover_files_recursive<'a>(
                     match file.file_type.as_str() {
                         "folder" => {
                             // 递归处理子文件夹
-                            let subfolder_node = FeishuTreeNode::FeishuFolder(crate::types::FeishuFolder {
+                            let subfolder_node = FeishuTreeNode::FeishuFolder(FeishuFolder {
                                 token: file.token.clone(),
                                 name: file.name.clone(),
                                 parent_token: file.parent_token.clone(),
@@ -104,30 +123,42 @@ fn discover_files_recursive<'a>(
                                 created_time: file.created_time.clone(),
                                 modified_time: file.modified_time.clone(),
                             });
-                            let subfolder_path = if current_path.is_empty() {
-                                file.name.clone()
-                            } else {
-                                format!("{}/{}", current_path, file.name)
-                            };
+                            let mut subfolder_path = node.path.clone();
+                            subfolder_path.push(folder.name.clone());
                             let mut subfolder_files = discover_files_recursive(
-                                &subfolder_node,
+                                &FeishuTreeNodeWrapper {
+                                    path: subfolder_path,
+                                    node: subfolder_node,
+                                },
                                 access_token,
-                                state,
-                                &subfolder_path
+                                state
                             ).await?;
                             files.append(&mut subfolder_files);
                         }
                         _ => {
                             // 普通文件
-                            files.push(FileInfo {
-                                token: file.token,
-                                name: file.name,
-                                file_type: file.file_type,
-                                relative_path: current_path.to_string(),
-                                space_id: None,
-                                status: "pending".to_string(),
-                                error: None,
+                            let subfile_node = FeishuTreeNode::FeishuFile(FeishuFile {
+                                token: file.token.clone(),
+                                name: file.name.clone(),
+                                parent_token: file.parent_token.clone(),
+                                url: file.url.clone(),
+                                created_time: file.created_time.clone(),
+                                modified_time: file.modified_time.clone(),
+                                file_type: file.file_type.clone(),
+                                shortcut_info: file.shortcut_info.clone(),
+                                owner_id: file.owner_id.clone(),
                             });
+                            let mut subfile_path = node.path.clone();
+                            subfile_path.push(folder.name.clone());
+                            let mut subfolder_files = discover_files_recursive(
+                                &FeishuTreeNodeWrapper {
+                                    path: subfile_path,
+                                    node: subfile_node,
+                                },
+                                access_token,
+                                state
+                            ).await?;
+                            files.append(&mut subfolder_files);
                         }
                     }
                 }
@@ -141,33 +172,34 @@ fn discover_files_recursive<'a>(
                     state.clone()
                 ).await?;
                 
-                for node in wiki_nodes {
-                    let wiki_node = FeishuTreeNode::FeishuWikiNode(node);
-                    let node_path = if current_path.is_empty() {
-                        space.name.clone()
-                    } else {
-                        format!("{}/{}", current_path, space.name)
-                    };
+                for feishu_wiki_node in wiki_nodes {
+                    let wiki_node = FeishuTreeNode::FeishuWikiNode(feishu_wiki_node.clone());
+                    let mut node_path = node.path.clone();
+                    node_path.push(space.name.clone());
                     let mut node_files = discover_files_recursive(
-                        &wiki_node,
+                        &FeishuTreeNodeWrapper {
+                            path: node_path,
+                            node: wiki_node,
+                        },
                         access_token,
-                        state,
-                        &node_path
+                        state
                     ).await?;
                     files.append(&mut node_files);
                 }
             }
-            FeishuTreeNode::FeishuWikiNode(node) => {
+            FeishuTreeNode::FeishuWikiNode(wiki_node) => {
                 // 知识库节点
-                match node.obj_type.as_str() {
-                    "doc" | "docx" | "sheet" | "bitable" => {
+                match wiki_node.obj_type.as_str() {
+                    "doc" | "docx" | "sheet" | "bitable" | "mindnote" | "file" | "slides" => {
                         // 文档类型，直接添加为文件
+                        let folder_path = node.path.clone();
+                        let path: PathBuf = folder_path.iter().collect();   
                         files.push(FileInfo {
-                            token: node.obj_token.clone(),
-                            name: node.title.clone(),
-                            file_type: node.obj_type.clone(),
-                            relative_path: current_path.to_string(),
-                            space_id: Some(node.space_id.clone()),
+                            token: wiki_node.obj_token.clone(),
+                            name: wiki_node.title.clone(),
+                            file_type: wiki_node.obj_type.clone(),
+                            relative_path: path,
+                            space_id: Some(wiki_node.space_id.clone()),
                             status: "pending".to_string(),
                             error: None,
                         });
@@ -177,32 +209,31 @@ fn discover_files_recursive<'a>(
                     }
                 }
                 // 其他类型，可能是文件夹，获取子节点
-                if node.has_child.unwrap_or(false) {
+                if wiki_node.has_child.unwrap_or(false) {
                     let child_nodes = crate::feishu_api::space_nodes(
                         access_token.to_string(),
-                        node.space_id.clone(),
-                        Some(node.node_token.clone()),
+                        wiki_node.space_id.clone(),
+                        Some(wiki_node.node_token.clone()),
                         state.clone()
                     ).await?;
                     
                     for child_node in child_nodes {
-                        let child_wiki_node = FeishuTreeNode::FeishuWikiNode(child_node);
-                        let child_path = if current_path.is_empty() {
-                            node.title.clone()
-                        } else {
-                            format!("{}/{}", current_path, node.title)
-                        };
+                        let child_wiki_node = FeishuTreeNode::FeishuWikiNode(child_node.clone());
+                        let mut child_path = node.path.clone();
+                        child_path.push(wiki_node.title.clone());
                         let mut child_files = discover_files_recursive(
-                            &child_wiki_node,
+                            &FeishuTreeNodeWrapper {
+                                path: child_path,
+                                node: child_wiki_node,
+                            },
                             access_token,
-                            state,
-                            &child_path
+                            state
                         ).await?;
                         files.append(&mut child_files);
                     }
                 }
             }
-            FeishuTreeNode::FeishuWikiRoot(_) => {
+            FeishuTreeNode::FeishuWikiRoot(wiki_root) => {
                 // Wiki根节点，获取所有知识库空间
                 let wiki_spaces = crate::feishu_api::wiki_spaces(
                     access_token.to_string(),
@@ -211,16 +242,16 @@ fn discover_files_recursive<'a>(
                 
                 for space in wiki_spaces {
                     let space_node = FeishuTreeNode::FeishuWikiSpace(space.clone());
-                    let space_path = if current_path.is_empty() {
-                        space.name.clone()
-                    } else {
-                        format!("{}/{}", current_path, space.name)
-                    };
+                    let mut space_path = node.path.clone();
+                    space_path.push(wiki_root.name.clone());
+
                     let mut space_files = discover_files_recursive(
-                        &space_node,
+                        &FeishuTreeNodeWrapper {
+                            path: space_path,
+                            node: space_node,
+                        },
                         access_token,
-                        state,
-                        &space_path
+                        state
                     ).await?;
                     files.append(&mut space_files);
                 }
@@ -241,6 +272,7 @@ pub async fn create_download_task(
 ) -> Result<DownloadTask, ApiError> {
     let task_id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
+    println!("create_download_task: {:?}", task_request);
     
     let new_task = DownloadTask {
         id: task_id.clone(),
@@ -263,15 +295,6 @@ pub async fn create_download_task(
             code: -1,
             msg: format!("创建任务失败: {}", e),
         })?;
-    
-    // 存储文件列表到download_files表
-    // for file in task_request.files {
-    //     state.db.create_file(&task_id, &file).await
-    //         .map_err(|e| ApiError {
-    //             code: -1,
-    //             msg: format!("创建任务文件失败: {}", e),
-    //         })?;
-    // }
     
     Ok(new_task)
 }
@@ -629,31 +652,42 @@ async fn discover_task_files(
     
     let mut all_files = Vec::new();
     
-
-    
     // 遍历所有选中的节点
     for node in selected_nodes {
         let mut node_files = discover_files_recursive(
             node,
             access_token,
-            state,
-            ""
+            state
         ).await?;
         all_files.append(&mut node_files);
     }
     
     println!("发现 {} 个文件", all_files.len());
     
+    // 去重：当 relative_path 和 name 都相同时只保留一份
+    let mut unique_files = Vec::new();
+    let mut seen_files = std::collections::HashSet::new();
+    
+    for file in all_files {
+        let key = (file.relative_path.clone(), file.name.clone());
+        if !seen_files.contains(&key) {
+            seen_files.insert(key);
+            unique_files.push(file);
+        }
+    }
+    
+    println!("去重后剩余 {} 个文件", unique_files.len());
+    
     // 批量保存文件到数据库
-    if !all_files.is_empty() {
-        state.db.create_files(&task.id, &all_files).await
+    if !unique_files.is_empty() {
+        state.db.create_files(&task.id, &unique_files).await
             .map_err(|e| ApiError {
                 code: -1,
                 msg: format!("保存文件列表失败: {}", e),
             })?;
         
         // 更新任务的总文件数
-        let total_files = all_files.len() as i32;
+        let total_files = unique_files.len() as i32;
         state.db.update_task_progress(&task.id, 0.0, 0, 0, total_files).await
             .map_err(|e| ApiError {
                 code: -1,

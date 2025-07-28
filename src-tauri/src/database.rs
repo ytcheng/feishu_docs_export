@@ -1,5 +1,5 @@
 use sqlx::{sqlite::SqlitePool, Row};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use crate::{DownloadTask, FileInfo};
 
 pub struct Database {
@@ -368,7 +368,7 @@ impl Database {
         .bind(&file.token)
         .bind(&file.name)
         .bind(&file.file_type)
-        .bind(&file.relative_path)
+        .bind(&file.relative_path.to_string_lossy())
         .bind(&file.space_id)
         .bind(&file.status)
         .bind(&file.error)
@@ -399,7 +399,7 @@ impl Database {
             .bind(&file.token)
             .bind(&file.name)
             .bind(&file.file_type)
-            .bind(&file.relative_path)
+            .bind(&file.relative_path.to_string_lossy())
             .bind(&file.space_id)
             .bind(&file.status)
             .bind(&file.error)
@@ -425,11 +425,12 @@ impl Database {
 
         let mut files = Vec::new();
         for row in rows {
+            let relative_path:String = row.get("relative_path");
             files.push(FileInfo {
                 token: row.get("token"),
                 name: row.get("name"),
                 file_type: row.get("file_type"),
-                relative_path: row.get("relative_path"),
+                relative_path: PathBuf::from(relative_path),
                 space_id: row.get("space_id"),
                 status: row.get("status"),
                 error: row.get("error_message"),

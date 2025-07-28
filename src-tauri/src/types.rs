@@ -6,6 +6,8 @@ use sqlx::{Encode, Type, decode::Decode, Sqlite, sqlite::SqliteValueRef};
 use sqlx::encode::IsNull;
 use sqlx::database::HasArguments;
 use sqlx::error::BoxDynError;
+use std::path::PathBuf;
+
 #[derive(Clone)]
 pub struct AppState {
     pub http_client: reqwest::Client,
@@ -50,6 +52,7 @@ pub struct UserInfo {
 /// 根文件夹元数据结构体
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FeishuRootMeta {
+    pub name: Option<String>,
     pub token: String,
     pub id: String,
     pub user_id: String,
@@ -82,7 +85,9 @@ pub struct FeishuFilesPagination {
     pub has_more: bool,
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct FeishuWikiRoot{}
+pub struct FeishuWikiRoot{
+    pub name: String,
+}
 
 /// 飞书文件夹结构体
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -150,19 +155,17 @@ pub enum FeishuTreeNode{
     FeishuWikiNode(FeishuWikiNode),
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct FeishuTree(Vec<FeishuTreeNode>);
+pub struct FeishuTreeNodeWrapper {
+    pub path: Vec<String>,
+    #[serde(flatten)]
+    pub node: FeishuTreeNode,
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FeishuTree(Vec<FeishuTreeNodeWrapper>);
 
 impl FeishuTree {
-    pub fn new(nodes: Vec<FeishuTreeNode>) -> Self {
-        FeishuTree(nodes)
-    }
-    
-    pub fn nodes(&self) -> &Vec<FeishuTreeNode> {
+    pub fn nodes(&self) -> &Vec<FeishuTreeNodeWrapper> {
         &self.0
-    }
-    
-    pub fn into_nodes(self) -> Vec<FeishuTreeNode> {
-        self.0
     }
 }
 impl Type<Sqlite> for FeishuTree {
@@ -222,28 +225,6 @@ pub struct CreateDownloadTaskRequest {
     pub selected_nodes: FeishuTree,
 }
 
-// /// 创建带节点的下载任务请求结构体
-// #[derive(Debug, Serialize, Deserialize, Clone)]
-// pub struct CreateDownloadTaskWithNodesRequest {
-//     pub name: String,
-//     pub description: Option<String>,
-//     pub status: String,
-//     pub progress: f64,
-//     #[serde(rename = "totalFiles")]
-//     pub total_files: i32,
-//     #[serde(rename = "downloadedFiles")]
-//     pub downloaded_files: i32,
-//     #[serde(rename = "failedFiles")]
-//     pub failed_files: i32,
-//     #[serde(rename = "outputPath")]
-//     pub output_path: String,
-//     #[serde(rename = "sourceType")]
-//     pub source_type: String,
-//     pub files: Vec<FileInfo>,
-//     #[serde(rename = "selectedNodes")]
-//     pub selected_nodes: Option<String>,
-// }
-
 /// 文件信息结构体
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileInfo {
@@ -252,7 +233,7 @@ pub struct FileInfo {
     #[serde(rename = "type")]
     pub file_type: String,
     #[serde(rename = "relativePath")]
-    pub relative_path: String,
+    pub relative_path: PathBuf,
     #[serde(rename = "spaceId")]
     pub space_id: Option<String>,
     pub status: String, // pending, downloading, completed, failed

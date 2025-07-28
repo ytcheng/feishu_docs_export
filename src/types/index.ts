@@ -8,6 +8,7 @@ export interface BaseTreeNode {
   isLeaf?: boolean;
   children?: TreeNode[];
   fileItem: FileItem;
+  path: string[];
   loadChildren: (accessToken?: string) => Promise<TreeNode[]>;
 }
 export interface FeishuWikiRootTreeNode extends BaseTreeNode {
@@ -119,6 +120,7 @@ export interface FeishuFileShortcutInfo{
 
 
 export interface FeishuRootMeta {
+  name: string;
   token: string;
   id: string;
   user_id: string;
@@ -148,7 +150,9 @@ export interface FeishuFile {
   modified_time?: string;
   owner_id?: String;
 }
-export interface FeishuWikiRoot{}
+export interface FeishuWikiRoot{
+  name: string;
+}
 /**
  * 飞书知识库空间接口
  */

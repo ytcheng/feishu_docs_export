@@ -22,7 +22,7 @@ const iconStyle = {
   fontSize: '16px'
 };
 
-function createWikiRootTreeNode(fileItem: FeishuWikiRoot): FeishuWikiRootTreeNode {
+function createWikiRootTreeNode(fileItem: FeishuWikiRoot, parentPath: string[]): FeishuWikiRootTreeNode {
   return {
     title: "知识库",
     key: "wiki_root",
@@ -30,13 +30,14 @@ function createWikiRootTreeNode(fileItem: FeishuWikiRoot): FeishuWikiRootTreeNod
     icon: <HomeOutlined style={{ ...iconStyle, color: '#722ed1' }} />,
     fileItem,
     isLeaf: false,
+    path: parentPath,
     loadChildren: async (accessToken?: string) => {
       const spaces = await tauriApi.getWikiSpaces(accessToken);
-      return spaces.map(createWikiSpaceTreeNode);
+      return spaces.map((space) => createWikiSpaceTreeNode(space, [...parentPath, "知识库"]));
     }
   };
 }
-function createWikiSpaceTreeNode(fileItem: FeishuWikiSpace): FeishuWikiSpaceTreeNode {
+function createWikiSpaceTreeNode(fileItem: FeishuWikiSpace, parentPath: string[]): FeishuWikiSpaceTreeNode {
   return {
     title: fileItem.name,
     key: fileItem.space_id,
@@ -44,13 +45,14 @@ function createWikiSpaceTreeNode(fileItem: FeishuWikiSpace): FeishuWikiSpaceTree
     icon: <BookOutlined style={{ ...iconStyle, color: '#52c41a' }} />,
     fileItem,
     isLeaf: false,
+    path: parentPath,
     loadChildren: async (accessToken?: string) => {
       const nodes = await tauriApi.getWikiSpaceNodes(fileItem.space_id, undefined, accessToken);
-      return nodes.map(createWikiNodeTreeNode);
+      return nodes.map((node) => createWikiNodeTreeNode(node, [...parentPath, fileItem.name]));
     }
   };
 }
-function createWikiNodeTreeNode(fileItem: FeishuWikiNode): FeishuWikiTreeNode {
+function createWikiNodeTreeNode(fileItem: FeishuWikiNode, parentPath: string[]): FeishuWikiTreeNode {
   return {
     title: fileItem.title,
     key: fileItem.node_token,
@@ -58,16 +60,17 @@ function createWikiNodeTreeNode(fileItem: FeishuWikiNode): FeishuWikiTreeNode {
     icon: fileItem.has_child ?  <FolderOpenOutlined style={{ ...iconStyle, color: '#fa8c16' }} /> : <FileTextOutlined style = {{ ...iconStyle, color: '#13c2c2'}} />,
     fileItem,
     isLeaf: fileItem.has_child,
+    path: parentPath,
     loadChildren: async (accessToken?: string) => {
       if (!fileItem.has_child) {
         return [];
       }
       const nodes = await tauriApi.getWikiSpaceNodes(fileItem.space_id, fileItem.node_token, accessToken);
-      return nodes.map(createWikiNodeTreeNode);
+      return nodes.map((node) => createWikiNodeTreeNode(node, [...parentPath, fileItem.title]));
     }
   };
 }
-function createFileTreeNode(fileItem: FeishuFile): FeishuFileTreeNode {
+function createFileTreeNode(fileItem: FeishuFile, parentPath: string[]): FeishuFileTreeNode {
   let icon = <PaperClipOutlined style={{ ...iconStyle, color: '#fa541c' }} />;
   switch (fileItem.type) {
     case 'doc':
@@ -88,10 +91,11 @@ function createFileTreeNode(fileItem: FeishuFile): FeishuFileTreeNode {
     icon,
     fileItem,
     isLeaf: true,
+    path: parentPath,
     loadChildren: async (_accessToken?: string) => [],
   };
 }
-function createFolderTreeNode(fileItem: FeishuFolder): FeishuFolderTreeNode {
+function createFolderTreeNode(fileItem: FeishuFolder, parentPath: string[]): FeishuFolderTreeNode {
   return {
     title: fileItem.name,
     key: fileItem.token,
@@ -99,32 +103,34 @@ function createFolderTreeNode(fileItem: FeishuFolder): FeishuFolderTreeNode {
     icon: <FolderOutlined style={{ ...iconStyle, color: '#1890ff' }} />,
     fileItem,
     isLeaf: false,
+    path: parentPath,
     loadChildren: async (accessToken?: string) => {
       const files = await tauriApi.getFolderFiles(fileItem.token, accessToken);
       return files.map((file) => {
         if (file.type === 'folder') {
-          return createFolderTreeNode(file);
+          return createFolderTreeNode(file, [...parentPath, fileItem.name]);
         }
-        return createFileTreeNode(file);
+        return createFileTreeNode(file, [...parentPath, fileItem.name]);
       });
     }
   };
 }
-function createRootMetaTreeNode(fileItem: FeishuRootMeta): FeishuRootMetaTreeNode {
+function createRootMetaTreeNode(fileItem: FeishuRootMeta, parentPath: string[]): FeishuRootMetaTreeNode {
   return {
-    title: "云盘",
+    title: fileItem.name ?? "云盘",
     key: fileItem.token,
     type: 'FeishuRootMeta',
     icon: <CloudOutlined style={{ ...iconStyle, color: '#fa541c' }} />,
     fileItem,
     isLeaf: false,
+    path: parentPath,
     loadChildren: async (accessToken?: string) => {
       const files = await tauriApi.getFolderFiles(fileItem.token, accessToken);
       return files.map((file) => {
         if (file.type === 'folder') {
-          return createFolderTreeNode(file);
+          return createFolderTreeNode(file, [...parentPath, fileItem.name ?? "云盘"]);
         }
-        return createFileTreeNode(file);
+        return createFileTreeNode(file, [...parentPath, fileItem.name ?? "云盘"]);
       });
     }
   };
@@ -143,87 +149,6 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const [_tasksLoading, setTasksLoading] = useState(false);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
-
-
-  // /**
-  //  * 获取文件夹文件列表
-  //  */
-  // const getFolderFiles = async (folderToken?: string): Promise<FileItem[]> => {
-  //   try {
-  //     console.log("getFolderFiles folderToken", folderToken);
-  //     const files = await tauriApi.getFolderFiles(folderToken);
-  //     return files;
-      
-  //   } catch (error) {
-  //     console.error('获取文件列表失败:', error);
-  //     message.error('获取文件列表失败');
-  //     return [];
-  //   }
-  // };
-
-  // /**
-  //  * 获取知识空间列表
-  //  */
-  // const getWikiSpaces = async (): Promise<FileItem[]> => {
-  //   try {
-  //     const wikiSpaces = await tauriApi.getWikiSpaces();
-      
-  //     return (wikiSpaces || []).map((space: any) => ({
-  //         token: space.space_id,
-  //         name: space.name || '未命名知识空间',
-  //         type: 'wiki_space' as const,
-  //         space_id: space.space_id,
-  //         has_child: true // 知识空间默认可以展开
-  //       }));
-  //   } catch (error) {
-  //     console.error('获取知识空间列表失败:', error);
-  //     message.error('获取知识空间列表失败');
-  //     return [];
-  //   }
-  // };
-
-  // /**
-  //  * 获取知识空间子节点列表
-  //  */
-  // const getWikiSpaceNodes = async (spaceId?: string, parentToken?: string): Promise<FileItem[]> => {
-  //   try {
-  //     if (!spaceId) {
-  //       message.error('知识空间ID不能为空');
-  //       return [];
-  //     }
-      
-  //     const wikiNodes = await tauriApi.getWikiSpaceNodes(spaceId, parentToken);
-      
-  //     return (wikiNodes || []).map((node: any) => ({
-  //         token: node.node_token,
-  //         name: node.title || '未命名节点',
-  //         type: 'wiki_node' as const,
-  //         space_id: spaceId,
-  //         node_type: node.node_type,
-  //         obj_type: node.obj_type,
-  //         obj_token: node.obj_token,
-  //         has_child: node.has_child
-  //       }));
-      
-  //   } catch (error) {
-  //     console.error('获取知识空间子节点失败:', error);
-  //     message.error('获取知识空间子节点失败');
-  //     return [];
-  //   }
-  // };
-
-  // /**
-  //  * 获取根文件夹元数据
-  //  */
-  // const getRootFolderMeta = async (): Promise<any> => {
-  //   try {
-  //     return await tauriApi.getRootFolderMeta();
-  //   } catch (error) {
-  //     console.error('获取根文件夹失败:', error);
-  //     message.error('获取根文件夹失败');
-  //     return null;
-  //   }
-  // };
 
   /**
    * 动态加载子节点数据
@@ -268,9 +193,9 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
         return;
       }
 
-      const driveRoot = createRootMetaTreeNode(rootMeta);
+      const driveRoot = createRootMetaTreeNode(rootMeta, []);
 
-      const wikiRoot = createWikiRootTreeNode({});
+      const wikiRoot = createWikiRootTreeNode({ name: "知识库" }, []);
 
       setTreeData([driveRoot, wikiRoot]);
       setExpandedKeys([rootMeta.token, 'wiki_root']);
@@ -288,67 +213,6 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
   const onExpand = (keys: React.Key[]) => {
     setExpandedKeys(keys as string[]);
   };
-
-
-  // /**
-  //  * 构建文件路径
-  //  */
-  // const buildFilePath = (node: TreeNode, pathFromRoot: string[]): string => {
-  //   const pathParts = [...pathFromRoot];
-  //   // if (file.name && file.name !== '云盘' && file.name !== '知识库') {
-  //   pathParts.push(node.title);
-  //   // }
-  //   return pathParts.join('/');
-  // };
-
-  // /**
-  //  * 递归获取文件夹下所有文件（带路径）
-  //  */
-  // const getAllFilesFromFolderWithPath = async (
-  //   token: string, 
-  //   type: string, 
-  //   spaceId?: string, 
-  //   currentPath: string[] = []
-  // ): Promise<Array<FileItem & { fullPath: string }>> => {
-  //   const allFiles: Array<FileItem & { fullPath: string }> = [];
-    
-  //   try {
-  //     let files: FileItem[] = [];
-      
-  //     if (type === 'folder') {
-  //       files = await getFolderFiles(token);
-  //     } else if (type === 'wiki_space') {
-  //       files = await getWikiSpaceNodes(spaceId!);
-  //     } else if (type === 'wiki_root') {
-  //       files = await getWikiSpaces();
-  //     } else if (type === 'wiki_node') {
-  //       files = await getWikiSpaceNodes(spaceId!, token);
-  //     }
-      
-  //     for (const file of files) {
-  //       if (file.has_child && (file.type === 'folder' || file.type === 'wiki_node')) {
-  //         const newPath = [...currentPath];
-  //         if (file.name && file.name !== '云盘' && file.name !== '知识库') {
-  //           newPath.push(file.name);
-  //         }
-          
-  //         if (file.type === 'wiki_node') {
-  //           const fullPath = buildFilePath(file, currentPath);
-  //           allFiles.push({ ...file, fullPath });
-  //         }
-  //         const subFiles = await getAllFilesFromFolderWithPath(file.token, file.type, file.space_id || spaceId, newPath);
-  //         allFiles.push(...subFiles);
-  //       } else {
-  //         const fullPath = buildFilePath(file, currentPath);
-  //         allFiles.push({ ...file, fullPath });
-  //       }
-  //     }
-  //   } catch (error) {
-  //     console.error(`获取文件夹 ${token} 下的文件失败:`, error);
-  //   }
-    
-  //   return allFiles;
-  // };
 
   /**
    * 根据选中的节点获取所有需要下载的文件
@@ -369,22 +233,6 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
       return null;
     };
     
-    // const getNodePath = (nodes: TreeNode[], targetKey: string, currentPath: string[] = []): string[] | null => {
-    //   for (const node of nodes) {
-    //     const newPath = [...currentPath];
-    //     newPath.push(node.title);
-        
-    //     if (node.key === targetKey) {
-    //       return newPath;
-    //     }
-        
-    //     if (node.children) {
-    //       const found = getNodePath(node.children, targetKey, newPath);
-    //       if (found) return found;
-    //     }
-    //   }
-    //   return null;
-    // };
     
     for (const key of selectedKeys) {
       const node = findNodeByKey(treeData, key);
@@ -392,24 +240,6 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
       allNodes.push(node!);
     }
     return allNodes;
-    //   const fileItem = node.fileItem;
-    //   const nodePath = getNodePath(treeData, key);
-    //   const pathFromRoot = nodePath ? nodePath.slice(0, -1) : [];
-      
-    //   if (fileItem.type === 'folder' || fileItem.type === 'wiki_root' || fileItem.type === 'wiki_space' || (fileItem.type === 'wiki_node' && fileItem.has_child)) {
-    //     if (fileItem.type === 'wiki_node') {
-    //       const fullPath = buildFilePath(fileItem, nodePath || []);
-    //       allFiles.push({ ...fileItem, fullPath });
-    //     }
-    //     const folderFiles = await getAllFilesFromFolderWithPath(fileItem.token, fileItem.type, fileItem.space_id, nodePath || []);
-    //     allFiles.push(...folderFiles);
-    //   } else {
-    //     const fullPath = buildFilePath(fileItem, pathFromRoot);
-    //     allFiles.push({ ...fileItem, fullPath });
-    //   }
-    // }
-    
-    // return allFiles;
   };
 
   /**
@@ -442,24 +272,6 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
         return;
       }
       
-      // const downloadFiles: TreeNode[] = nodesToDownload.map(node => {
-      //   // let actualType: DownloadFile['type'] = file.type;
-      //   // let actualToken: string = file.token;
-        
-      //   // if (file.type === 'wiki_node' && file.obj_type) {
-      //   //   const validTypes: DownloadFile['type'][] = ['doc', 'docx', 'sheet', 'bitable', 'file'];
-      //   //   actualType = validTypes.includes(file.obj_type as DownloadFile['type']) 
-      //   //     ? (file.obj_type as DownloadFile['type']) 
-      //   //     : 'doc';
-      //   //   actualToken = file.obj_token || file.token;
-      //   // }
-        
-      //   return {
-      //     type: node.type,
-      //     data: node
-      //   };
-      // });
-      // const downloadFiles: SelectedNode[] = [];
       const task: Omit<DownloadTaskRequest, 'id' | 'createdAt' | 'updatedAt'> = {
         name: `导出任务 - ${new Date().toLocaleString()}`,
         outputPath: selected,

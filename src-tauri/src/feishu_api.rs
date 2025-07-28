@@ -134,7 +134,9 @@ pub async fn root_folder_meta(access_token: String, state: State<'_, AppState>) 
             msg: result.msg,
         });
     }
-    Ok(result.data.unwrap())
+    let mut meta = result.data.unwrap();
+    meta.name = Some("云盘".to_string());
+    Ok(meta)
 }
 
 
