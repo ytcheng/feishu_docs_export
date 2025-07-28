@@ -5,18 +5,14 @@ import { open as openPath } from '@tauri-apps/plugin-shell';
 import type {
   DownloadTask,
   FeishuFile,
-  FeishuFolder,
   FeishuWikiSpace,
   FeishuWikiNode,
-  ApiResponse,
   TokenInfo,
   UserInfo,
   DownloadProgressEvent,
   DownloadCompleteEvent,
   DownloadErrorEvent,
   FeishuRootMeta,
-  FeishuFilesPagination,
-  FeishuWikiSpacesPagination
 } from '../types';
 
 /**

@@ -65,6 +65,24 @@ export interface FeishuFileShortcutInfo{
   target_type: string;
   target_token: string;
 }
+
+
+export interface FeishuRootMeta {
+  token: string;
+  id: string;
+  user_id: string;
+}
+/**
+ * 飞书文件夹接口
+ */
+export interface FeishuFolder {
+  token: string;
+  name: string;
+  parent_token?: string;
+  url?: string;
+  created_time?: string;
+  modified_time?: string;
+}
 /**
  * 飞书文件接口
  */
@@ -79,31 +97,7 @@ export interface FeishuFile {
   modified_time?: string;
   owner_id?: String;
 }
-
-export interface FeishuFilesPagination {
-  files: FeishuFile[];
-  next_page_token?: string;
-  has_more: boolean;
-}
-
-export interface FeishuRootMeta{
-  token: string;
-  id: string;
-  user_id: string;
-}
-
-/**
- * 飞书文件夹接口
- */
-export interface FeishuFolder {
-  token: string;
-  name: string;
-  parent_token?: string;
-  url?: string;
-  created_time?: string;
-  modified_time?: string;
-}
-
+export interface FeishuWikiRoot{}
 /**
  * 飞书知识库空间接口
  */
@@ -114,12 +108,6 @@ export interface FeishuWikiSpace {
   visibility?: string;
   space_type?: string;
   open_sharing?: string;
-}
-
-export interface FeishuWikiSpacesPagination {
-  items: FeishuWikiSpace[];
-  next_page_token?: string;
-  has_more: boolean;
 }
 
 /**
@@ -139,15 +127,6 @@ export interface FeishuWikiNode {
   obj_create_time?: string;
   obj_edit_time?: string;
   node_create_time?: string;
-}
-
-/**
- * API响应接口
- */
-export interface ApiResponse<T = any> {
-  code: number;
-  msg: string;
-  data?: T;
 }
 
 /**
