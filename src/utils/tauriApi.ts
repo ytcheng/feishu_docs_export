@@ -1,7 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
-import { open as openPath } from '@tauri-apps/plugin-shell';
 import type {
   DownloadTask,
   FeishuFile,
@@ -227,7 +226,7 @@ export class TauriApi {
    * @param path 目录路径
    */
   async openDirectory(path: string): Promise<void> {
-    await openPath(path);
+    await invoke('open_directory', { path });
   }
 
   /**

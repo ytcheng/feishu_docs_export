@@ -22,6 +22,42 @@ use tokio::runtime::Runtime;
 use reqwest::Client;
 use tauri::{Builder, Manager};
 
+
+/**
+ * 打开目录
+ * @param path 目录路径
+ */
+#[tauri::command]
+async fn open_directory(path: String) -> Result<(), String> {
+    use std::process::Command;
+    
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("无法打开目录: {}", e))?;
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("无法打开目录: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("无法打开目录: {}", e))?;
+    }
+    
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     Builder::default().setup(|app| {
@@ -94,7 +130,8 @@ pub fn run() {
             retry_download_file,
             resume_downloading_tasks,
             resume_paused_task,
-            stop_download_task
+            stop_download_task,
+            open_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
