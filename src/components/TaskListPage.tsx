@@ -144,6 +144,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
 
   /**
    * 删除下载任务
+   * 后端会自动处理正在运行的任务停止逻辑
    */
   const handleDeleteTask = async (taskId: string) => {
     try {
@@ -261,7 +262,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     // 监听下载进度更新
     const handleDownloadProgress = (data: any) => {
       console.log('下载进度更新:', data);
-      message.info(`正在下载: ${data.current_file} (${data.completed_files}/${data.total_files})`);
+      // message.info(`正在下载: ${data.current_file} (${data.completed_files}/${data.total_files})`);
       updateTasksSilently(); // 静默更新任务列表以更新进度
     };
     

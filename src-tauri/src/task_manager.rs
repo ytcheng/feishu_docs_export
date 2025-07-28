@@ -387,15 +387,41 @@ pub async fn update_download_task(
  * 删除下载任务
  */
 #[tauri::command]
+/**
+ * 删除下载任务
+ * 如果任务正在运行，先停止任务再删除
+ */
 pub async fn delete_download_task(
     id: String,
     state: State<'_, AppState>
 ) -> Result<bool, ApiError> {
+    println!("删除任务: {}", id);
+    
+    // 检查任务是否正在运行，如果是则先停止
+    let handle = {
+        let mut active_downloads = state.active_downloads.lock().unwrap();
+        active_downloads.remove(&id)
+    };
+    
+    if let Some(handle) = handle {
+        println!("任务 {} 正在运行，先停止任务", id);
+        // 取消正在运行的任务
+        handle.abort();
+        
+        // 更新任务状态为暂停
+        let _ = state.db.update_task_status(&id, "paused").await;
+        
+        println!("任务 {} 已停止", id);
+    }
+    
+    // 删除任务记录
     state.db.delete_task(&id).await
         .map_err(|e| ApiError {
             code: -1,
             msg: format!("删除任务失败: {}", e),
         })?;
+        
+    println!("任务 {} 删除成功", id);
     Ok(true)
 }
 
