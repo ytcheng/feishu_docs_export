@@ -49,7 +49,7 @@ const AuthPage: React.FC<{ onAuth: (token: string) => void }> = ({ onAuth }) => 
       // 调用Tauri后端获取token
       const tokenData = await tauriApi.getAccessToken(code);
       // 获取用户信息
-      const user_info = await tauriApi.getUserInfo(tokenData.access_token);
+      const user_info = await tauriApi.getUserInfo();
       console.log("handleAuthCallback user_info", user_info);
       const authData: AuthData = {
         access_token: tokenData.access_token,
@@ -58,8 +58,6 @@ const AuthPage: React.FC<{ onAuth: (token: string) => void }> = ({ onAuth }) => 
       };
       
       // 保存认证数据到本地存储
-      localStorage.setItem('feishu_access_token', authData.access_token);
-      localStorage.setItem('feishu_refresh_token', authData.refresh_token);
       localStorage.setItem('feishu_user_info', JSON.stringify(authData.user_info));
       
       console.log('授权成功，已保存认证数据到localStorage');

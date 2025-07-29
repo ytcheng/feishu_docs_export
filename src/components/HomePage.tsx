@@ -31,8 +31,8 @@ function createWikiRootTreeNode(fileItem: FeishuWikiRoot, parentPath: string[]):
     fileItem,
     isLeaf: false,
     path: parentPath,
-    loadChildren: async (accessToken?: string) => {
-      const spaces = await tauriApi.getWikiSpaces(accessToken);
+    loadChildren: async () => {
+      const spaces = await tauriApi.getWikiSpaces();
       return spaces.map((space) => createWikiSpaceTreeNode(space, [...parentPath, "知识库"]));
     }
   };
@@ -46,8 +46,8 @@ function createWikiSpaceTreeNode(fileItem: FeishuWikiSpace, parentPath: string[]
     fileItem,
     isLeaf: false,
     path: parentPath,
-    loadChildren: async (accessToken?: string) => {
-      const nodes = await tauriApi.getWikiSpaceNodes(fileItem.space_id, undefined, accessToken);
+    loadChildren: async () => {
+      const nodes = await tauriApi.getWikiSpaceNodes(fileItem.space_id, undefined);
       return nodes.map((node) => createWikiNodeTreeNode(node, [...parentPath, fileItem.name]));
     }
   };
@@ -61,11 +61,11 @@ function createWikiNodeTreeNode(fileItem: FeishuWikiNode, parentPath: string[]):
     fileItem,
     isLeaf: fileItem.has_child,
     path: parentPath,
-    loadChildren: async (accessToken?: string) => {
+    loadChildren: async () => {
       if (!fileItem.has_child) {
         return [];
       }
-      const nodes = await tauriApi.getWikiSpaceNodes(fileItem.space_id, fileItem.node_token, accessToken);
+      const nodes = await tauriApi.getWikiSpaceNodes(fileItem.space_id, fileItem.node_token);
       return nodes.map((node) => createWikiNodeTreeNode(node, [...parentPath, fileItem.title]));
     }
   };
@@ -92,7 +92,7 @@ function createFileTreeNode(fileItem: FeishuFile, parentPath: string[]): FeishuF
     fileItem,
     isLeaf: true,
     path: parentPath,
-    loadChildren: async (_accessToken?: string) => [],
+    loadChildren: async () => [],
   };
 }
 function createFolderTreeNode(fileItem: FeishuFolder, parentPath: string[]): FeishuFolderTreeNode {
@@ -104,8 +104,8 @@ function createFolderTreeNode(fileItem: FeishuFolder, parentPath: string[]): Fei
     fileItem,
     isLeaf: false,
     path: parentPath,
-    loadChildren: async (accessToken?: string) => {
-      const files = await tauriApi.getFolderFiles(fileItem.token, accessToken);
+    loadChildren: async () => {
+      const files = await tauriApi.getFolderFiles(fileItem.token);
       return files.map((file) => {
         if (file.type === 'folder') {
           return createFolderTreeNode(file, [...parentPath, fileItem.name]);
@@ -124,8 +124,8 @@ function createRootMetaTreeNode(fileItem: FeishuRootMeta, parentPath: string[]):
     fileItem,
     isLeaf: false,
     path: parentPath,
-    loadChildren: async (accessToken?: string) => {
-      const files = await tauriApi.getFolderFiles(fileItem.token, accessToken);
+    loadChildren: async () => {
+      const files = await tauriApi.getFolderFiles(fileItem.token);
       return files.map((file) => {
         if (file.type === 'folder') {
           return createFolderTreeNode(file, [...parentPath, fileItem.name ?? "云盘"]);
@@ -286,11 +286,10 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
       setSelectedKeys([]);
       
       // 自动开始下载任务（异步执行，不阻塞界面）
-      const accessToken = localStorage.getItem('feishu_access_token');
-      if (accessToken) {
+      if (await tauriApi.checkLoginStatus()) {
         message.success('导出任务已创建，正在后台开始执行...');
         // 异步执行下载任务，不等待响应
-        tauriApi.executeDownloadTask(taskId, accessToken)
+        tauriApi.executeDownloadTask(taskId)
           .then(() => {
             console.log('下载任务启动成功');
             loadTasks(); // 刷新任务列表

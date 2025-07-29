@@ -175,9 +175,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
    */
   const handleStartDownload = async (taskId: string) => {
     try {
-      // 从localStorage获取访问令牌
-      const access_token = localStorage.getItem('feishu_access_token');
-      if (!access_token) {
+      if (!(await tauriApi.checkLoginStatus())) {
         message.error('请先登录飞书账号');
         return;
       }
@@ -192,12 +190,12 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
       if (task.status === 'paused') {
         // 暂停状态的任务使用恢复API
         message.info('正在恢复暂停的任务...');
-        await tauriApi.resumePausedTask(taskId, access_token);
+        await tauriApi.resumePausedTask(taskId);
         message.success('任务已恢复下载');
       } else {
         // 其他状态的任务使用普通下载API
         message.info('任务开始下载，请稍候...');
-        tauriApi.executeDownloadTask(taskId, access_token)
+        tauriApi.executeDownloadTask(taskId)
           .then(() => {
             message.success('任务开始下载');
           })
@@ -228,27 +226,6 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
       message.error('停止下载失败');
     }
   };
-
-  /**
-   * 自动恢复下载任务
-   */
-  // const handleAutoResumeDownloadTasks = async () => {
-  //   try {
-  //     // 从localStorage获取访问令牌
-  //     const access_token = localStorage.getItem('feishu_access_token');
-  //     if (!access_token) {
-  //       message.error('请先登录飞书账号');
-  //       return;
-  //     }
-      
-  //     const result = await tauriApi.resumeDownloadTasks(access_token);
-  //      message.success(result || '下载任务已恢复');
-  //     loadTasks(); // 重新加载任务列表
-  //   } catch (error) {
-  //      console.error('自动恢复下载任务失败:', error);
-  //      message.error('自动恢复下载任务失败');
-  //    }
-  //  };
 
   /**
    * 组件挂载时加载数据
@@ -301,10 +278,9 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     const handleAutoResumeTask = async (data: any) => {
       console.log('自动恢复下载任务:', data);
       try {
-        const access_token = localStorage.getItem('feishu_access_token');
-        if (access_token) {
+        if (await tauriApi.checkLoginStatus()) {
           message.info(`正在恢复下载任务: ${data.taskName}`);
-          tauriApi.executeDownloadTask(data.taskId, access_token)
+          tauriApi.executeDownloadTask(data.taskId)
             .then(() => {
               updateTasksSilently(); // 静默更新任务列表
             })
@@ -597,14 +573,13 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
    */
   const handleRetryFile = async (taskId: string, fileToken: string) => {
     try {
-      const access_token = localStorage.getItem('feishu_access_token');
-      if (!access_token) {
+      if (!(await tauriApi.checkLoginStatus())) {
         message.error('请先登录飞书账号');
         return;
       }
       
       message.info('正在重试下载文件...');
-      await tauriApi.retryDownloadFile(taskId, fileToken, access_token);
+      await tauriApi.retryDownloadFile(taskId, fileToken);
       message.success('文件重试下载已开始');
       loadTasks(); // 重新加载任务列表
     } catch (error) {

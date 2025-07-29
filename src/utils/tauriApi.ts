@@ -21,8 +21,6 @@ import type {
 export class TauriApi {
   private static instance: TauriApi;
   private tokenExpiredUnlisten: (() => void) | null = null;
-  private isRefreshingToken = false;
-  private refreshPromise: Promise<boolean> | null = null;
 
   private constructor() {}
 
@@ -30,105 +28,11 @@ export class TauriApi {
    * 清除登录状态
    */
   private clearAuthState(): void {
-    localStorage.removeItem('feishu_access_token');
-    localStorage.removeItem('feishu_refresh_token');
     localStorage.removeItem('feishu_user_info');
     // 可以触发一个事件通知应用程序用户需要重新登录
     window.dispatchEvent(new CustomEvent('auth-expired'));
   }
 
-  /**
-   * 尝试刷新访问令牌
-   */
-  private async tryRefreshToken(): Promise<boolean> {
-    if (this.isRefreshingToken && this.refreshPromise) {
-      return this.refreshPromise;
-    }
-
-    this.isRefreshingToken = true;
-    this.refreshPromise = this.performTokenRefresh();
-    
-    try {
-      const result = await this.refreshPromise;
-      return result;
-    } finally {
-      this.isRefreshingToken = false;
-      this.refreshPromise = null;
-    }
-  }
-
-  /**
-   * 执行令牌刷新
-   */
-  private async performTokenRefresh(): Promise<boolean> {
-    try {
-      const refreshToken = localStorage.getItem('feishu_refresh_token');
-      if (!refreshToken) {
-        console.warn('没有刷新令牌，无法刷新访问令牌');
-        this.clearAuthState();
-        return false;
-      }
-
-      const tokenInfo = await this.refreshAccessToken(refreshToken);
-        // 更新存储的令牌
-      localStorage.setItem('feishu_access_token', tokenInfo.access_token);
-      if (tokenInfo.refresh_token) {
-        localStorage.setItem('feishu_refresh_token', tokenInfo.refresh_token);
-        }
-        console.log('访问令牌刷新成功');
-        return true;
-      
-    } catch (error) {
-      console.error('刷新访问令牌时发生错误:', error);
-      this.clearAuthState();
-      return false;
-    }
-  }
-
-  /**
-   * 包装API调用，自动处理401错误和令牌刷新
-   */
-  private async withTokenRefresh<T>(apiCall: (accessToken: string) => Promise<T>, accessToken?: string): Promise<T> {
-    // 如果没有提供accessToken，从localStorage获取
-    const currentToken = accessToken || localStorage.getItem('feishu_access_token');
-    if (!currentToken) {
-      throw new Error('未找到访问令牌，请先登录');
-    }
-
-    try {
-      return await apiCall(currentToken);
-    } catch (error: any) {
-      console.log('API调用错误:', error);
-      // 检查是否是401错误或包含认证失败的信息
-      const is401Error = 
-        (error?.code === 99991677) ||
-        (error?.response?.status === 401) ||
-        (error?.message && error.message.includes('401')) ||
-        (error?.msg && (error.msg.includes('token') || error.msg.includes('unauthorized')));
-
-      if (is401Error) {
-        console.log('检测到401错误，尝试刷新令牌...');
-        const refreshSuccess = await this.tryRefreshToken();
-        
-        if (refreshSuccess) {
-          console.log('令牌刷新成功，重试API调用...');
-          // 获取刷新后的新token
-          const newToken = localStorage.getItem('feishu_access_token');
-          if (!newToken) {
-            throw new Error('刷新令牌后未找到新的访问令牌');
-          }
-          // 使用新token重试原始API调用
-          return await apiCall(newToken);
-        } else {
-          console.error('令牌刷新失败，用户需要重新登录');
-          throw new Error('认证失败，请重新登录');
-        }
-      }
-      
-      // 如果不是401错误，直接抛出原始错误
-      throw error;
-    }
-  }
 
   /**
    * 获取单例实例
@@ -158,56 +62,73 @@ export class TauriApi {
 
   /**
    * 获取用户信息
-   * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
-  async getUserInfo(accessToken?: string): Promise<UserInfo> {
-    return await this.withTokenRefresh((token) => invoke('get_user_info', { accessToken: token }), accessToken);
+  async getUserInfo(): Promise<UserInfo> {
+    return await invoke('get_user_info');
+  }
+
+  /**
+   * 登录出
+   */
+  async logout(): Promise<void> {
+    await invoke('logout');
+    this.clearAuthState();
+  }
+
+  /**
+   * 检查登录状态
+   */
+  async checkLoginStatus(): Promise<boolean> {
+    return await invoke('check_login_status');
+  }
+
+  /**
+   * 监听登录过期事件
+   * @param callback 回调函数
+   */
+  async onLoginExpire(callback: (data: string) => void): Promise<() => void> {
+    const unlisten = await listen('login_expired', (event) => {
+      callback(event.payload as string);
+    });
+    return unlisten;
   }
 
   /**
    * 获取根文件夹元数据
-   * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
-  async getRootFolderMeta(accessToken?: string): Promise<FeishuRootMeta> {
-    return await this.withTokenRefresh((token) => invoke('get_root_folder_meta', { accessToken: token }), accessToken);
+  async getRootFolderMeta(): Promise<FeishuRootMeta> {
+    return await invoke('get_root_folder_meta');
   }
 
   /**
    * 获取文件夹文件列表
    * @param folderToken 文件夹令牌
-   * @param pageSize 页面大小
-   * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
   async getFolderFiles(
-    folderToken?: string,
-    accessToken?: string
+    folderToken?: string
   ): Promise<FeishuFile[]> {
-    return await this.withTokenRefresh((token) => invoke('get_folder_files', { accessToken: token, folderToken }), accessToken);
+    return await invoke('get_folder_files', { folderToken });
   }
 
   /**
    * 获取知识库空间列表
    * @param pageSize 页面大小
-   * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
   async getWikiSpaces(
-    accessToken?: string
   ): Promise<FeishuWikiSpace[]> {
-    return await this.withTokenRefresh((token) => invoke('get_wiki_spaces', { accessToken: token }), accessToken);
+    return await invoke('get_wiki_spaces');
   }
 
   /**
    * 获取知识库空间节点
    * @param spaceId 空间ID
    * @param parentNodeToken 父节点令牌
-   * @param accessToken 访问令牌（可选，如果不提供则从localStorage获取）
    */
   async getWikiSpaceNodes(
     spaceId?: string,
-    parentNodeToken?: string,
-    accessToken?: string
+    parentNodeToken?: string
   ): Promise< FeishuWikiNode[] > {
-    return await this.withTokenRefresh((token) => invoke('get_wiki_space_nodes', { accessToken: token, spaceId, parentNodeToken }), accessToken);
+    return await invoke('get_wiki_space_nodes', { spaceId, parentNodeToken });
   }
 
   /**
@@ -316,10 +237,9 @@ export class TauriApi {
   /**
    * 执行下载任务
    * @param taskId 任务ID
-   * @param accessToken 访问令牌（可选）
    */
-  async executeDownloadTask(taskId: string, accessToken?: string): Promise<boolean> {
-    return await this.withTokenRefresh((token) => invoke('execute_download_task', { taskId, accessToken: token }), accessToken);
+  async executeDownloadTask(taskId: string): Promise<boolean> {
+    return await invoke('execute_download_task', { taskId });
   }
 
   /**
@@ -334,35 +254,31 @@ export class TauriApi {
    * 重试下载文件
    * @param taskId 任务ID
    * @param fileToken 文件令牌
-   * @param accessToken 访问令牌（可选）
    */
-  async retryDownloadFile(taskId: string, fileToken: string, accessToken?: string): Promise<boolean> {
-    return await this.withTokenRefresh((token) => invoke('retry_download_file', { taskId, fileToken, accessToken: token }), accessToken);
+  async retryDownloadFile(taskId: string, fileToken: string): Promise<boolean> {
+    return await invoke('retry_download_file', { taskId, fileToken });
   }
 
   /**
    * 恢复下载任务
-   * @param accessToken 访问令牌（可选）
    */
-  async resumeDownloadTasks(accessToken?: string): Promise<string> {
-    return await this.withTokenRefresh((token) => invoke('resume_downloading_tasks', { accessToken: token }), accessToken);
+  async resumeDownloadTasks(): Promise<string> {
+    return await invoke('resume_downloading_tasks');
   }
 
   /**
    * 恢复所有pending状态的下载任务
-   * @param accessToken 访问令牌（可选）
    */
-  async resumeDownloadingTasks(accessToken?: string): Promise<string> {
-    return await this.withTokenRefresh((token) => invoke('resume_downloading_tasks', { accessToken: token }), accessToken);
+  async resumeDownloadingTasks(): Promise<string> {
+    return await invoke('resume_downloading_tasks');
   }
 
   /**
    * 手动恢复单个暂停的任务
    * @param taskId 任务ID
-   * @param accessToken 访问令牌（可选）
    */
-  async resumePausedTask(taskId: string, accessToken?: string): Promise<void> {
-    return await this.withTokenRefresh((token) => invoke('resume_paused_task', { taskId, accessToken: token }), accessToken);
+  async resumePausedTask(taskId: string): Promise<void> {
+    return await invoke('resume_paused_task', { taskId });
   }
 
   /**

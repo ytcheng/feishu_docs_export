@@ -20,7 +20,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
 use reqwest::Client;
-use tauri::{Builder, Manager};
+use tauri::{Builder, Manager, Emitter};
+
+use crate::config::{FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_REDIRECT_URI};
+use crate::feishu_api::FeishuApi;
 
 
 /**
@@ -61,6 +64,7 @@ async fn open_directory(path: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     Builder::default().setup(|app| {
+        let handle = app.handle().clone();
         // 使用新 API 获取路径
         let resolver = app.path();
         let data_dir = resolver.app_data_dir()
@@ -95,7 +99,14 @@ pub fn run() {
         let database = rt.block_on(Database::new(&db_path_str))
             .expect("Failed to initialize database");
 
+        let feishu_api = FeishuApi::new(FEISHU_APP_ID.to_string(), FEISHU_APP_SECRET.to_string(), FEISHU_REDIRECT_URI.to_string(), app_data_dir, Some(Box::new(move |err| {
+            
+            println!("登录过期，请重新登录: {}", err);
+            handle.emit("login_expired", "登录过期，请重新登录").unwrap();
+        })));
+
         let app_state = AppState {
+            feishu_api: Arc::new(feishu_api),
             http_client: Client::new(),
             db: Arc::new(database),
             active_downloads: Arc::new(Mutex::new(HashMap::new())),
@@ -116,6 +127,8 @@ pub fn run() {
             get_access_token,
             refresh_access_token,
             get_user_info,
+            logout,
+            check_login_status,
             get_root_folder_meta,
             get_folder_files,
             get_wiki_spaces,

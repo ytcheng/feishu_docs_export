@@ -14,7 +14,6 @@ const { Text } = Typography;
 
 const App: React.FC = () => {
   const [authed, setAuthed] = useState(false);
-  const [_accessToken, setAccessToken] = useState<string | null>(null);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [currentPage, setCurrentPage] = useState<'home' | 'list'>('home');
 
@@ -23,7 +22,7 @@ const App: React.FC = () => {
    * @param token - 获取到的access_token
    */
   const handleAuth = async (token: string) => {
-    setAccessToken(token);
+    // setAccessToken(token);
     setAuthed(true);
     
     // 加载用户信息
@@ -41,7 +40,7 @@ const App: React.FC = () => {
     
     // 恢复pending状态的下载任务
      try {
-       await tauriApi.resumeDownloadingTasks(token);
+       await tauriApi.resumeDownloadingTasks();
        console.log('恢复pending下载任务完成');
      } catch (error) {
        console.error('恢复pending下载任务失败:', error);
@@ -52,10 +51,8 @@ const App: React.FC = () => {
    * 处理退出登录
    */
   const handleLogout = () => {
-    localStorage.removeItem('feishu_access_token');
-    localStorage.removeItem('feishu_refresh_token');
     localStorage.removeItem('feishu_user_info');
-    setAccessToken(null);
+    tauriApi.logout();
     setUserInfo(null);
     setAuthed(false);
     console.log('已退出登录');
@@ -65,9 +62,8 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initializeApp = async () => {
-      const token = localStorage.getItem('feishu_access_token');
-      if (token) {
-        setAccessToken(token);
+      tauriApi.onLoginExpire(handleLogout);
+      if (await tauriApi.checkLoginStatus()) {
         setAuthed(true);
         
         // 加载用户信息
@@ -86,7 +82,7 @@ const App: React.FC = () => {
         
         // 恢复pending状态的下载任务
         try {
-          await tauriApi.resumeDownloadingTasks(token);
+          await tauriApi.resumeDownloadingTasks();
           console.log('应用启动时恢复pending下载任务完成');
         } catch (error) {
           console.error('应用启动时恢复pending下载任务失败:', error);

@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use std::fmt;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 use crate::database::Database;
+use crate::feishu_api::FeishuApi;
 use sqlx::{Encode, Type, decode::Decode, Sqlite, sqlite::SqliteValueRef};
 use sqlx::encode::IsNull;
 use sqlx::database::HasArguments;
@@ -11,6 +13,7 @@ use std::path::PathBuf;
 #[derive(Clone)]
 pub struct AppState {
     pub http_client: reqwest::Client,
+    pub feishu_api: std::sync::Arc<FeishuApi>,
     pub db: std::sync::Arc<Database>,
     pub active_downloads: std::sync::Arc<std::sync::Mutex<HashMap<String, JoinHandle<()>>>>,
 }
@@ -29,7 +32,13 @@ pub struct ApiError {
     pub code: i32,
     pub msg: String,
 }
+impl fmt::Display for ApiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ApiError(code: {}, msg: {})", self.code, self.msg)
+    }
+}
 
+impl std::error::Error for ApiError {}
 /// 令牌信息结构体
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TokenInfo {

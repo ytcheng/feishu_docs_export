@@ -1,37 +1,29 @@
 use std::sync::Arc;
 use std::path::Path;
 use tauri::{AppHandle, Emitter, State};
-use reqwest::Client;
-use futures_util::StreamExt;
-use tokio::io::AsyncWriteExt;
 use chrono;
 use std::path::PathBuf;
 
 
 use crate::types::{
-    ApiError, DownloadTask, CreateDownloadTaskRequest, FileInfo, 
-    ExportTaskRequest, ExportTaskResponse, ExportTaskStatus, 
-    DownloadProgress, ApiResponse, AppState, FeishuTreeNode, FeishuTreeNodeWrapper, FeishuFolder, FeishuFile,
+    ApiError, DownloadTask, CreateDownloadTaskRequest, FileInfo,
+    DownloadProgress, AppState, FeishuTreeNode, FeishuTreeNodeWrapper, FeishuFolder, FeishuFile,
 };
 
 /// 递归发现文件的函数
 /// 根据飞书节点类型递归获取所有文件信息
 fn discover_files_recursive<'a>(
     node: &'a FeishuTreeNodeWrapper,
-    access_token: &'a str,
     state: &'a State<'a, AppState>
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<FileInfo>, ApiError>> + Send + 'a>> {
     Box::pin(async move {
+        let feishu_api = state.feishu_api.clone();
         let mut files = Vec::new();
         
         match &node.node {
             FeishuTreeNode::FeishuRootMeta(root) => {
                 // 根目录，获取其下的所有文件
-                let drive_files = crate::feishu_api::drive_files(
-                    access_token.to_string(),
-                    Some(root.token.clone()),
-                    state.clone()
-                ).await?;
+                let drive_files = feishu_api.drive_files(Some(root.token.clone())).await?;
                 
                 for file in drive_files {
                     match file.file_type.as_str() {
@@ -52,7 +44,6 @@ fn discover_files_recursive<'a>(
                                     path: folder_path,
                                     node: folder_node,
                                 },
-                                access_token,
                                 state
                             ).await?;
                             files.append(&mut folder_files);
@@ -105,11 +96,7 @@ fn discover_files_recursive<'a>(
             }
             FeishuTreeNode::FeishuFolder(folder) => {
                 // 文件夹，获取其下的所有文件
-                let drive_files = crate::feishu_api::drive_files(
-                    access_token.to_string(),
-                    Some(folder.token.clone()),
-                    state.clone()
-                ).await?;
+                let drive_files = feishu_api.drive_files(Some(folder.token.clone())).await?;
                 
                 for file in drive_files {
                     match file.file_type.as_str() {
@@ -130,7 +117,6 @@ fn discover_files_recursive<'a>(
                                     path: subfolder_path,
                                     node: subfolder_node,
                                 },
-                                access_token,
                                 state
                             ).await?;
                             files.append(&mut subfolder_files);
@@ -155,7 +141,6 @@ fn discover_files_recursive<'a>(
                                     path: subfile_path,
                                     node: subfile_node,
                                 },
-                                access_token,
                                 state
                             ).await?;
                             files.append(&mut subfolder_files);
@@ -165,12 +150,7 @@ fn discover_files_recursive<'a>(
             }
             FeishuTreeNode::FeishuWikiSpace(space) => {
                 // 知识库空间，获取根节点
-                let wiki_nodes = crate::feishu_api::space_nodes(
-                    access_token.to_string(),
-                    space.space_id.clone(),
-                    None, // 获取根节点
-                    state.clone()
-                ).await?;
+                let wiki_nodes = feishu_api.space_nodes(space.space_id.clone(), None).await?;
                 
                 for feishu_wiki_node in wiki_nodes {
                     let wiki_node = FeishuTreeNode::FeishuWikiNode(feishu_wiki_node.clone());
@@ -181,7 +161,6 @@ fn discover_files_recursive<'a>(
                             path: node_path,
                             node: wiki_node,
                         },
-                        access_token,
                         state
                     ).await?;
                     files.append(&mut node_files);
@@ -210,12 +189,7 @@ fn discover_files_recursive<'a>(
                 }
                 // 其他类型，可能是文件夹，获取子节点
                 if wiki_node.has_child.unwrap_or(false) {
-                    let child_nodes = crate::feishu_api::space_nodes(
-                        access_token.to_string(),
-                        wiki_node.space_id.clone(),
-                        Some(wiki_node.node_token.clone()),
-                        state.clone()
-                    ).await?;
+                    let child_nodes = feishu_api.space_nodes(wiki_node.space_id.clone(),Some(wiki_node.node_token.clone())).await?;
                     
                     for child_node in child_nodes {
                         let child_wiki_node = FeishuTreeNode::FeishuWikiNode(child_node.clone());
@@ -226,7 +200,6 @@ fn discover_files_recursive<'a>(
                                 path: child_path,
                                 node: child_wiki_node,
                             },
-                            access_token,
                             state
                         ).await?;
                         files.append(&mut child_files);
@@ -235,10 +208,7 @@ fn discover_files_recursive<'a>(
             }
             FeishuTreeNode::FeishuWikiRoot(wiki_root) => {
                 // Wiki根节点，获取所有知识库空间
-                let wiki_spaces = crate::feishu_api::wiki_spaces(
-                    access_token.to_string(),
-                    state.clone()
-                ).await?;
+                let wiki_spaces = feishu_api.wiki_spaces().await?;
                 
                 for space in wiki_spaces {
                     let space_node = FeishuTreeNode::FeishuWikiSpace(space.clone());
@@ -250,7 +220,6 @@ fn discover_files_recursive<'a>(
                             path: space_path,
                             node: space_node,
                         },
-                        access_token,
                         state
                     ).await?;
                     files.append(&mut space_files);
@@ -425,249 +394,10 @@ pub async fn delete_download_task(
     Ok(true)
 }
 
-/**
- * 根据文件类型获取默认导出格式
- */
-fn get_default_extension(file_type: &str) -> &str {
-    match file_type {
-        "doc" | "docx" => "docx",
-        "sheet" | "bitable" => "xlsx",
-        _ => "pdf",
-    }
-}
 
-/**
- * 创建导出任务
- */
-async fn create_export_task(
-    client: &Client,
-    access_token: &str,
-    file_token: &str,
-    file_type: &str,
-) -> Result<String, ApiError> {
-    let extension = get_default_extension(file_type);
-    
-    let request_body = ExportTaskRequest {
-        file_extension: extension.to_string(),
-        token: file_token.to_string(),
-        file_type: file_type.to_string(),
-    };
-    
-    let response = client
-        .post("https://open.feishu.cn/open-apis/drive/v1/export_tasks")
-        .header("Authorization", format!("Bearer {}", access_token))
-        .header("Content-Type", "application/json")
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| ApiError {
-            code: -1,
-            msg: format!("创建导出任务请求失败: {}", e),
-        })?;
-    
-    if !response.status().is_success() {
-        return Err(ApiError {
-            code: -1,
-            msg: format!("创建导出任务失败: HTTP {}", response.status()),
-        });
-    }
-    
-    let result: ApiResponse<ExportTaskResponse> = response
-        .json()
-        .await
-        .map_err(|e| ApiError {
-            code: -1,
-            msg: format!("解析导出任务响应失败: {}", e),
-        })?;
-    
-    if result.code != 0 {
-        return Err(ApiError {
-            code: result.code,
-            msg: format!("创建导出任务失败: {}", result.msg),
-        });
-    }
-    
-    result.data
-        .map(|d| d.ticket)
-        .ok_or_else(|| ApiError {
-            code: -1,
-            msg: "导出任务响应中缺少ticket".to_string(),
-        })
-}
-
-/**
- * 查询导出任务状态
- */
-async fn get_export_task_status(
-    client: &Client,
-    access_token: &str,
-    ticket: &str,
-    file_token: &str,
-) -> Result<Option<String>, ApiError> {
-    print!("get_export_task_status ticket:{}, file_token: {}", ticket, file_token);
-    let url = format!(
-        "https://open.feishu.cn/open-apis/drive/v1/export_tasks/{}?token={}",
-        ticket, file_token
-    );
-    
-    let response = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", access_token))
-        .send()
-        .await
-        .map_err(|e| ApiError {
-            code: -1,
-            msg: format!("查询导出任务状态请求失败: {}", e),
-        })?;
-    
-    if !response.status().is_success() {
-        return Err(ApiError {
-            code: -1,
-            msg: format!("查询导出任务状态失败: HTTP {}", response.status()),
-        });
-    }
-    
-    let result: ApiResponse<ExportTaskStatus> = response
-        .json()
-        .await
-        .map_err(|e| ApiError {
-            code: -1,
-            msg: format!("解析导出任务状态响应失败: {}", e),
-        })?;
-    
-    if result.code != 0 {
-        return Err(ApiError {
-            code: result.code,
-            msg: format!("查询导出任务状态失败: {}", result.msg),
-        });
-    }
-    
-    Ok(result.data
-        .and_then(|d| d.result)
-        .and_then(|r| {
-            println!("导出任务状态检查: job_status={}, job_error_msg={}", r.job_status, r.job_error_msg);
-            
-            // 检查任务是否成功完成 (job_status == 0 表示成功)
-            if r.job_status == 0 {
-                println!("导出任务成功，返回file_token: {}", r.file_token);
-                Some(r.file_token)
-            } else {
-                println!("导出任务未完成，job_status: {}", r.job_status);
-                None
-            }
-        }))
-}
-
-/**
- * 等待导出任务完成
- */
-async fn wait_for_export_task(
-    client: &Client,
-    access_token: &str,
-    ticket: &str,
-    file_token: &str,
-    max_retries: u32,
-) -> Result<String, ApiError> {
-    for _ in 0..max_retries {
-        if let Some(download_token) = get_export_task_status(client, access_token, ticket, file_token).await? {
-            return Ok(download_token);
-        }
-        
-        // 等待2秒后重试
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-    }
-    
-    Err(ApiError {
-        code: -1,
-        msg: "导出任务超时".to_string(),
-    })
-}
-
-/**
- * 下载文件到指定路径
- */
-async fn download_file_to_path(
-    client: &Client,
-    access_token: &str,
-    file_token: &str,
-    save_path: &Path,
-    is_export_file: bool,
-) -> Result<(), ApiError> {
-    let url = if is_export_file {
-        format!(
-            "https://open.feishu.cn/open-apis/drive/v1/export_tasks/file/{}/download",
-            urlencoding::encode(file_token)
-        )
-    } else {
-        format!(
-            "https://open.feishu.cn/open-apis/drive/v1/files/{}/download",
-            file_token
-        )
-    };
-    
-    let response = client
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", access_token))
-        .send()
-        .await
-        .map_err(|e| ApiError {
-            code: -1,
-            msg: format!("下载文件请求失败: {}", e),
-        })?;
-    
-    if !response.status().is_success() {
-        return Err(ApiError {
-            code: -1,
-            msg: format!("下载文件失败: url {},HTTP {}", url, response.status()),
-        });
-    }
-    
-    // 确保目录存在
-    if let Some(parent) = save_path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|e| ApiError {
-                code: -1,
-                msg: format!("创建目录失败: {}", e),
-            })?;
-    }
-    
-    // 创建文件
-    let mut file = tokio::fs::File::create(save_path)
-        .await
-        .map_err(|e| ApiError {
-            code: -1,
-            msg: format!("创建文件失败: {}", e),
-        })?;
-    
-    // 流式下载
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| ApiError {
-            code: -1,
-            msg: format!("下载数据块失败: {}", e),
-        })?;
-        file.write_all(&chunk)
-            .await
-            .map_err(|e| ApiError {
-                code: -1,
-                msg: format!("写入文件失败: {}", e),
-            })?;
-    }
-    
-    file.flush()
-        .await
-        .map_err(|e| ApiError {
-            code: -1,
-            msg: format!("刷新文件失败: {}", e),
-        })?;
-    
-    Ok(())
-}
 
 async fn discover_task_files(
     task: DownloadTask,
-    access_token: &str,
     state: &State<'_, AppState>,
 ) -> Result<(), ApiError> {
     
@@ -682,7 +412,6 @@ async fn discover_task_files(
     for node in selected_nodes {
         let mut node_files = discover_files_recursive(
             node,
-            access_token,
             state
         ).await?;
         all_files.append(&mut node_files);
@@ -736,12 +465,12 @@ async fn discover_task_files(
  */
 async fn start_download_task_with_resume(
     task: DownloadTask,
-    access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>,
     _is_resume: bool  // 参数保留但不再使用，逻辑已统一
 ) -> Result<(), ApiError> {
     let task_id = task.id.clone();
+    let feishu_api = state.feishu_api.clone();
     
     // 检查任务是否已经在运行
     {
@@ -756,7 +485,7 @@ async fn start_download_task_with_resume(
     
     // pending任务，先根据selected_nodes获取下载文件
     if task.status == "pending"{
-        discover_task_files(task.clone(), &access_token, &state).await?;
+        discover_task_files(task.clone(), &state).await?;
     }
     
     // 从download_files表获取文件列表
@@ -802,9 +531,7 @@ async fn start_download_task_with_resume(
     
     // 克隆必要的数据用于异步任务
     let task_id_clone = task_id.clone();
-    let access_token_clone = access_token.clone();
     let output_path = task.output_path.clone();
-    let client = state.http_client.clone();
     let db = Arc::clone(&state.db);
     let active_downloads = Arc::clone(&state.active_downloads);
     
@@ -875,34 +602,35 @@ async fn start_download_task_with_resume(
                     .join(&file.relative_path)
                     .join(&file.name);
                 
-                download_file_to_path(
-                    &client,
-                    &access_token_clone,
-                    &file.token,
-                    &file_path,
-                    false,
-                ).await
+                feishu_api.download_file_to_path(file,  Path::new(&output_path), false).await
             } else if ["doc", "docx", "sheet", "bitable"].contains(&file.file_type.as_str()) {
                 // 需要导出的文件类型
-                match create_export_task(&client, &access_token_clone, &file.token, &file.file_type).await {
+                match feishu_api.create_export_task(&file.token, &file.file_type).await {
                     Ok(ticket) => {
                         println!("创建导出任务成功，ticket: {}", ticket);
                         
-                        match wait_for_export_task(&client, &access_token_clone, &ticket, &file.token, 30).await {
+                        match feishu_api.wait_for_export_task(&ticket, &file.token, 30).await {
                             Ok(download_token) => {
                                 println!("导出任务完成，下载token: {}", download_token);
+                                let download_file = FileInfo { 
+                                    token: download_token, 
+                                    name: file.name.clone(), 
+                                    file_type: file.file_type.clone(), 
+                                    relative_path: file.relative_path.clone(), 
+                                    space_id: file.space_id.clone(), 
+                                    status: "pending".to_string(), 
+                                    error: None 
+                                };
                                 
-                                let extension = get_default_extension(&file.file_type);
-                                let file_name = format!("{}.{}", file.name, extension);
-                                let file_path = Path::new(&output_path)
-                                    .join(&file.relative_path)
-                                    .join(&file_name);
+                                // let extension = get_default_extension(&file.file_type);
+                                // let file_name = format!("{}.{}", file.name, extension);
+                                // let file_path = Path::new(&output_path)
+                                //     .join(&file.relative_path);
+                                    // .join(&file_name);
                                 
-                                download_file_to_path(
-                                    &client,
-                                    &access_token_clone,
-                                    &download_token,
-                                    &file_path,
+                                feishu_api.download_file_to_path(
+                                    &download_file,
+                                    Path::new(&output_path),
                                     true,
                                 ).await
                             }
@@ -994,12 +722,11 @@ async fn start_download_task_with_resume(
  */
 async fn start_download_task_internal(
     task: DownloadTask,
-    access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>
 ) -> Result<(), ApiError> {
     // 调用支持断点续传的函数，is_resume=false表示新任务
-    start_download_task_with_resume(task, access_token, app_handle, state, false).await
+    start_download_task_with_resume(task, app_handle, state, false).await
 }
 
 /**
@@ -1008,7 +735,6 @@ async fn start_download_task_internal(
 #[tauri::command]
 pub async fn execute_download_task(
     task_id: String,
-    access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>
 ) -> Result<bool, ApiError> {
@@ -1026,7 +752,7 @@ pub async fn execute_download_task(
         })?;
     
     // 使用内部函数启动下载
-    start_download_task_internal(task, access_token, app_handle, state).await?;
+    start_download_task_internal(task, app_handle, state).await?;
     
     Ok(true)
 }
@@ -1052,7 +778,6 @@ pub async fn retry_download_file(
 #[tauri::command]
 pub async fn start_download_task(
     task_id: String,
-    access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>
 ) -> Result<(), ApiError> {
@@ -1086,7 +811,7 @@ pub async fn start_download_task(
         });
     }
     
-    start_download_task_internal(task, access_token, app_handle, state).await
+    start_download_task_internal(task, app_handle, state).await
 }
 
 /**
@@ -1095,7 +820,6 @@ pub async fn start_download_task(
  */
 #[tauri::command]
 pub async fn resume_downloading_tasks(
-    access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>
 ) -> Result<String, ApiError> {
@@ -1144,7 +868,6 @@ pub async fn resume_downloading_tasks(
         // 使用断点续传模式启动任务
         if let Err(e) = start_download_task_with_resume(
             task,
-            access_token.clone(),
             app_handle.clone(),
             state.clone(),
             true // is_resume = true
@@ -1164,7 +887,6 @@ pub async fn resume_downloading_tasks(
 #[tauri::command]
 pub async fn resume_paused_task(
     task_id: String,
-    access_token: String,
     app_handle: AppHandle,
     state: State<'_, AppState>
 ) -> Result<(), ApiError> {
@@ -1205,7 +927,6 @@ pub async fn resume_paused_task(
     // 使用断点续传模式启动任务
     start_download_task_with_resume(
         task,
-        access_token,
         app_handle,
         state,
         true // is_resume = true
