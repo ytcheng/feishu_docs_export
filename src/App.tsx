@@ -6,8 +6,8 @@ import HomePage from './components/HomePage';
 import TaskListPage from './components/TaskListPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { UserInfo } from './types';
-import { tauriApi } from './utils/tauriApi';
 import './App.css';
+import { feishuApi } from './utils/feishuApi';
 
 const { Header, Content } = Layout;
 const { Text } = Typography;
@@ -39,12 +39,12 @@ const App: React.FC = () => {
     console.log('应用已切换到主界面，token已保存到状态中');
     
     // 恢复pending状态的下载任务
-     try {
-       await tauriApi.resumeDownloadingTasks();
-       console.log('恢复pending下载任务完成');
-     } catch (error) {
-       console.error('恢复pending下载任务失败:', error);
-     }
+    //  try {
+    //    await tauriApi.resumeDownloadingTasks();
+    //    console.log('恢复pending下载任务完成');
+    //  } catch (error) {
+    //    console.error('恢复pending下载任务失败:', error);
+    //  }
    };
 
   /**
@@ -52,7 +52,6 @@ const App: React.FC = () => {
    */
   const handleLogout = () => {
     localStorage.removeItem('feishu_user_info');
-    tauriApi.logout();
     setUserInfo(null);
     setAuthed(false);
     console.log('已退出登录');
@@ -62,8 +61,8 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initializeApp = async () => {
-      tauriApi.onLoginExpire(handleLogout);
-      if (await tauriApi.checkLoginStatus()) {
+      // tauriApi.onLoginExpire(handleLogout);
+      if (await feishuApi.checkToken()) {
         setAuthed(true);
         
         // 加载用户信息
@@ -81,12 +80,12 @@ const App: React.FC = () => {
         console.log('应用已切换到主界面，token已从localStorage加载');
         
         // 恢复pending状态的下载任务
-        try {
-          await tauriApi.resumeDownloadingTasks();
-          console.log('应用启动时恢复pending下载任务完成');
-        } catch (error) {
-          console.error('应用启动时恢复pending下载任务失败:', error);
-        }
+        // try {
+        //   await tauriApi.resumeDownloadingTasks();
+        //   console.log('应用启动时恢复pending下载任务完成');
+        // } catch (error) {
+        //   console.error('应用启动时恢复pending下载任务失败:', error);
+        // }
       }
     };
     
@@ -99,11 +98,11 @@ const App: React.FC = () => {
     };
     
     // 设置token过期监听器
-    tauriApi.onTokenExpired(handleTokenExpired);
+    // tauriApi.onTokenExpired(handleTokenExpired);
     
     // 清理监听器
     return () => {
-      tauriApi.removeTokenExpiredListener();
+      // tauriApi.removeTokenExpiredListener();
     };
   }, []);
 

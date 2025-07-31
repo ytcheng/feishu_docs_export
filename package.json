@@ -19,7 +19,9 @@
     "@tauri-apps/plugin-http": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-shell": "^2",
+    "@tauri-apps/plugin-sql": "^2.3.0",
     "antd": "^5.26.6",
+    "axios": "^1.11.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

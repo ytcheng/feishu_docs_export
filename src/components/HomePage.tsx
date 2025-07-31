@@ -14,8 +14,10 @@ import {
   CloudOutlined
 } from '@ant-design/icons';
 import { open } from '@tauri-apps/plugin-dialog';
-import { tauriApi } from '../utils/tauriApi';
-import type { DownloadTask, FeishuWikiRoot, FeishuWikiSpace, FeishuWikiNode, FeishuFile, FeishuFolder, FeishuRootMeta, DownloadTaskRequest, FeishuWikiRootTreeNode, FeishuWikiSpaceTreeNode, FeishuWikiTreeNode, FeishuFileTreeNode, FeishuFolderTreeNode, FeishuRootMetaTreeNode, TreeNode } from '../types';
+import { type FeishuWikiRoot, type FeishuWikiSpace, type FeishuWikiNode, type FeishuFile, type FeishuFolder, type FeishuRootMeta, type FeishuWikiRootTreeNode, type FeishuWikiSpaceTreeNode, type FeishuWikiTreeNode, type FeishuFileTreeNode, type FeishuFolderTreeNode, type FeishuRootMetaTreeNode, type TreeNode} from '../types';
+import { type DownloadTask, type DownloadFile, FileStatus, TaskStatus } from '../types/database';
+import { driveApi } from '../utils/drive';
+import { createDownloadTask, startDownloadTask, getDownloadTasks } from '../utils/taskManager';
 
 
 const iconStyle = {
@@ -32,7 +34,7 @@ function createWikiRootTreeNode(fileItem: FeishuWikiRoot, parentPath: string[]):
     isLeaf: false,
     path: parentPath,
     loadChildren: async () => {
-      const spaces = await tauriApi.getWikiSpaces();
+      const spaces = await driveApi.getWikiSpaces();
       return spaces.map((space) => createWikiSpaceTreeNode(space, [...parentPath, "知识库"]));
     }
   };
@@ -47,7 +49,7 @@ function createWikiSpaceTreeNode(fileItem: FeishuWikiSpace, parentPath: string[]
     isLeaf: false,
     path: parentPath,
     loadChildren: async () => {
-      const nodes = await tauriApi.getWikiSpaceNodes(fileItem.space_id, undefined);
+      const nodes = await driveApi.getWikiSpaceNodes(fileItem.space_id, undefined);
       return nodes.map((node) => createWikiNodeTreeNode(node, [...parentPath, fileItem.name]));
     }
   };
@@ -59,13 +61,13 @@ function createWikiNodeTreeNode(fileItem: FeishuWikiNode, parentPath: string[]):
     type: 'FeishuWikiNode',
     icon: fileItem.has_child ?  <FolderOpenOutlined style={{ ...iconStyle, color: '#fa8c16' }} /> : <FileTextOutlined style = {{ ...iconStyle, color: '#13c2c2'}} />,
     fileItem,
-    isLeaf: fileItem.has_child,
+    isLeaf: !fileItem.has_child,
     path: parentPath,
     loadChildren: async () => {
       if (!fileItem.has_child) {
         return [];
       }
-      const nodes = await tauriApi.getWikiSpaceNodes(fileItem.space_id, fileItem.node_token);
+      const nodes = await driveApi.getWikiSpaceNodes(fileItem.space_id, fileItem.node_token);
       return nodes.map((node) => createWikiNodeTreeNode(node, [...parentPath, fileItem.title]));
     }
   };
@@ -105,7 +107,7 @@ function createFolderTreeNode(fileItem: FeishuFolder, parentPath: string[]): Fei
     isLeaf: false,
     path: parentPath,
     loadChildren: async () => {
-      const files = await tauriApi.getFolderFiles(fileItem.token);
+      const files = await driveApi.getFolderFiles(fileItem.token);
       return files.map((file) => {
         if (file.type === 'folder') {
           return createFolderTreeNode(file, [...parentPath, fileItem.name]);
@@ -125,7 +127,7 @@ function createRootMetaTreeNode(fileItem: FeishuRootMeta, parentPath: string[]):
     isLeaf: false,
     path: parentPath,
     loadChildren: async () => {
-      const files = await tauriApi.getFolderFiles(fileItem.token);
+      const files = await driveApi.getFolderFiles(fileItem.token);
       return files.map((file) => {
         if (file.type === 'folder') {
           return createFolderTreeNode(file, [...parentPath, fileItem.name ?? "云盘"]);
@@ -188,7 +190,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
   const loadRootData = async () => {
     setLoading(true);
     try {
-      const rootMeta = await tauriApi.getRootFolderMeta();
+      const rootMeta = await driveApi.getRootFolderMeta();
       console.log("loadRootData rootMeta", rootMeta);
       if (!rootMeta) {
         return;
@@ -272,50 +274,41 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
         message.warning('未找到可下载的文件');
         return;
       }
+
+      const downloadedFiles: DownloadFile[] = nodesToDownload.map((node) => {
+        return {
+          name: node.title,
+          path: node.path.map((name) => name.trim().replace(/[\\\/:\*\?"<>\|]/g, "_")).join('/'),//处理路径中的特殊字符，并拼接
+          status: FileStatus.PENDING,
+          type: node.type,
+          isLeaf: node.isLeaf??false,
+          isExpanded: false,
+          fileInfo: node.fileItem
+        }
+      }); 
       
-      const task: Omit<DownloadTaskRequest, 'id' | 'createdAt' | 'updatedAt'> = {
+      // const task: Omit<DownloadTaskRequest, 'id' | 'createdAt' | 'updatedAt'> = {
+      //   name: `导出任务 - ${new Date().toLocaleString()}`,
+      //   outputPath: selected,
+      //   selectedNodes: nodesToDownload
+      // };
+      const downloadTask: DownloadTask = {
         name: `导出任务 - ${new Date().toLocaleString()}`,
         outputPath: selected,
-        selectedNodes: nodesToDownload
+        status: TaskStatus.PENDING,
+        progress: 0,
+        totalFiles: nodesToDownload.length,
+        downloadedFiles: 0,
+        failedFiles: 0,
+        files: downloadedFiles,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
-    
-      const result = await tauriApi.createDownloadTask(task);
-      const taskId = typeof result === 'string' ? result : result.id;
+      const newtask = await createDownloadTask(downloadTask);
       
       message.success(`成功创建导出任务，共 ${nodesToDownload.length} 个文件`);
       setSelectedKeys([]);
-      
-      // 自动开始下载任务（异步执行，不阻塞界面）
-      if (await tauriApi.checkLoginStatus()) {
-        message.success('导出任务已创建，正在后台开始执行...');
-        // 异步执行下载任务，不等待响应
-        tauriApi.executeDownloadTask(taskId)
-          .then(() => {
-            console.log('下载任务启动成功');
-            loadTasks(); // 刷新任务列表
-          })
-          .catch((executeError) => {
-            console.error('自动开始导出任务失败:', executeError);
-            let errorMessage = '自动开始导出失败，请手动开始';
-            if (executeError && typeof executeError === 'object') {
-              if ('response' in executeError && executeError.response && 
-                  typeof executeError.response === 'object' && 'data' in executeError.response &&
-                  executeError.response.data && typeof executeError.response.data === 'object' && 
-                  'msg' in executeError.response.data) {
-                errorMessage = `自动开始导出失败: ${executeError.response.data.msg}`;
-              } else if ('data' in executeError && executeError.data && typeof executeError.data === 'object' && 'msg' in executeError.data) {
-                errorMessage = `自动开始导出失败: ${executeError.data.msg}`;
-              } else if ('message' in executeError) {
-                errorMessage = `自动开始导出失败: ${executeError.message}`;
-              }
-            } else if (typeof executeError === 'string') {
-              errorMessage = `自动开始导出失败: ${executeError}`;
-            }
-            message.warning(errorMessage);
-          });
-      } else {
-        message.warning('未找到访问令牌，请手动开始导出任务');
-      }
+      startDownloadTask(newtask.id!);
       
     } catch (error) {
       console.error('创建导出任务失败:', error);
@@ -331,7 +324,7 @@ const HomePage: React.FC<HomePageProps> = ({ onViewTasks }) => {
   const loadTasks = async () => {
     setTasksLoading(true);
     try {
-      const allTasks = await tauriApi.getDownloadTasks();
+      const allTasks = await getDownloadTasks();
       // 只显示进行中的任务
       const activeTasks = allTasks.filter(task => 
         task.status === 'downloading' || task.status === 'pending'

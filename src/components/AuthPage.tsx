@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, Typography, App } from 'antd';
-import { tauriApi } from '../utils/tauriApi'; 
+import { feishuApi } from '../utils/feishuApi';
 import { openUrl} from '@tauri-apps/plugin-opener'
 import { start, cancel, onUrl } from '@fabianlars/tauri-plugin-oauth';
 
@@ -9,6 +9,7 @@ import { start, cancel, onUrl } from '@fabianlars/tauri-plugin-oauth';
 const { Title, Paragraph } = Typography;
 
 const FEISHU_APP_ID = 'cli_a1ad86f33c38500d';
+const FEISHU_SCOPE = 'docs:doc docs:document.media:download docs:document:export docx:document drive:drive drive:file drive:file:download offline_access';
 // const FEISHU_REDIRECT_URI = 'http://localhost:{}/callback';
 
 // 全局标记，防止多个组件实例同时初始化QR码
@@ -35,7 +36,7 @@ const AuthPage: React.FC<{ onAuth: (token: string) => void }> = ({ onAuth }) => 
   const qrInitializedRef = useRef<boolean>(false);
   const authCallbackRef = useRef(onAuth);
   const port = useRef(0);
-  
+  const redirectUri = useRef('');
   // 更新回调引用
   authCallbackRef.current = onAuth;
   
@@ -47,9 +48,9 @@ const AuthPage: React.FC<{ onAuth: (token: string) => void }> = ({ onAuth }) => 
       console.log('收到授权码:', code);
       
       // 调用Tauri后端获取token
-      const tokenData = await tauriApi.getAccessToken(code);
+      const tokenData = await feishuApi.getAccessToken(code, redirectUri.current);
       // 获取用户信息
-      const user_info = await tauriApi.getUserInfo();
+      const user_info = await feishuApi.getUserInfo();
       console.log("handleAuthCallback user_info", user_info);
       const authData: AuthData = {
         access_token: tokenData.access_token,
@@ -182,10 +183,10 @@ const AuthPage: React.FC<{ onAuth: (token: string) => void }> = ({ onAuth }) => 
         // 再次检查是否已经初始化（防止多个setTimeout同时执行）
         if (!qrInitializedRef.current) return;
 
-        const FEISHU_REDIRECT_URI = `http://localhost:${port.current}/callback`;
-        console.log("FEISHU_REDIRECT_URI", FEISHU_REDIRECT_URI);
+        redirectUri.current = `http://localhost:${port.current}/callback`;
+        console.log("redirectUri", redirectUri.current);
         // @ts-ignore
-        const goto = `https://passport.feishu.cn/suite/passport/oauth/authorize?client_id=${FEISHU_APP_ID}&redirect_uri=${FEISHU_REDIRECT_URI}&response_type=code&state=STATE`;
+        const goto = `https://passport.feishu.cn/suite/passport/oauth/authorize?client_id=${FEISHU_APP_ID}&redirect_uri=${redirectUri.current}&response_type=code&scope=${encodeURIComponent(FEISHU_SCOPE)}&state=STATE`;
         console.log("goto", goto);
         try {
           // 清理页面中所有可能存在的飞书QR码元素

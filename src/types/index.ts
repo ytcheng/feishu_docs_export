@@ -47,7 +47,7 @@ export type TreeNode =
  * 下载进度事件
  */
 export interface DownloadProgressEvent {
-  task_id: string;
+  task_id: number;
   progress: number;
   completed_files: number;
   total_files: number;
@@ -136,13 +136,14 @@ export interface FeishuFolder {
   created_time?: string;
   modified_time?: string;
 }
+export type FeiShuFileType = 'doc' | 'sheet' | 'mindnote' | 'bitable' | 'file' | 'docx' | 'folder' | 'shortcut';
 /**
  * 飞书文件接口
  */
 export interface FeishuFile {
   token: string;
   name: string;
-  type: string;
+  type: FeiShuFileType;
   parent_token?: string;
   url?: string;
   shortcut_info?: FeishuFileShortcutInfo,
@@ -164,7 +165,7 @@ export interface FeishuWikiSpace {
   space_type?: string;
   open_sharing?: string;
 }
-
+export type FeishuWikiNodeObjType = 'doc' | 'sheet' | 'mindnote' | 'bitable' | 'file' | 'docx' | 'slides';
 /**
  * 飞书知识库节点接口
  */
@@ -172,7 +173,7 @@ export interface FeishuWikiNode {
   space_id: string;
   node_token: string;
   obj_token: string;
-  obj_type: string;
+  obj_type: FeishuWikiNodeObjType;
   parent_node_token?: string;
   node_type: string;
   origin_node_token?: string;
@@ -193,9 +194,6 @@ export interface TokenInfo {
   expires_in: number;
   token_type: string;
 }
-
-/**
- * 
 
 /**
  * 下载完成事件

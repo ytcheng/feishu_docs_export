@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Card, Table, Progress, Space, Button, Tag, Popconfirm, Typography, Spin, Tooltip, App } from 'antd';
 import { DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, ArrowLeftOutlined, StopOutlined } from '@ant-design/icons';
-import { DownloadTask, DownloadFile } from '../types';
-import { tauriApi } from '../utils/tauriApi';
-
+import { DownloadTask, DownloadFile } from '../types/database';
+import { openPath } from '@tauri-apps/plugin-opener'
+import { feishuApi } from '../utils/feishuApi';
+import * as taskManager from '../utils/taskManager';
+import { FeishuFile, FeishuWikiNode } from '../types';
 const { Text } = Typography;
 
 /**
@@ -89,9 +91,8 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
-
-
-
+  const taskScrollRef = useRef<HTMLDivElement>(null);
+  const tasksRef = useRef<DownloadTask[]>([]);
   /**
    * 加载下载任务列表（保持滚动位置）
    */
@@ -101,9 +102,10 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     
     setLoading(true);
     try {
-      const taskList = await tauriApi.getDownloadTasks();
+      const taskList = await taskManager.getDownloadTasks();
       console.log("loadTasks", taskList);
       setTasks(taskList);
+      tasksRef.current = taskList;
       
       // 恢复滚动位置
       setTimeout(() => {
@@ -127,9 +129,10 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     const currentScrollTop = taskScrollRef.current?.scrollTop || 0;
     
     try {
-      const taskList = await tauriApi.getDownloadTasks();
+      const taskList = await taskManager.getDownloadTasks();
       console.log("updateTasksSilently", taskList);
       setTasks(taskList);
+      tasksRef.current = taskList;
       
       // 恢复滚动位置
       setTimeout(() => {
@@ -146,10 +149,10 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
    * 删除下载任务
    * 后端会自动处理正在运行的任务停止逻辑
    */
-  const handleDeleteTask = async (taskId: string) => {
+  const handleDeleteTask = async (taskId: number) => {
     try {
       console.log("handleDeleteTask", taskId);
-      await tauriApi.deleteDownloadTask(taskId);
+      await taskManager.deleteDownloadTask(taskId);
       message.success('任务删除成功');
       loadTasks(); // 重新加载任务列表
     } catch (error) {
@@ -163,7 +166,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
    */
   const handleOpenSaveDir = async (outputPath: string) => {
     try {
-      await tauriApi.openDirectory(outputPath);
+      await openPath(outputPath);
     } catch (error) {
       console.error('打开目录失败:', error);
       message.error('打开目录失败');
@@ -173,9 +176,9 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   /**
    * 开始下载任务（根据任务状态调用不同的API）
    */
-  const handleStartDownload = async (taskId: string) => {
+  const handleStartDownload = async (taskId: number) => {
     try {
-      if (!(await tauriApi.checkLoginStatus())) {
+      if (!(await feishuApi.checkToken())) {
         message.error('请先登录飞书账号');
         return;
       }
@@ -187,23 +190,10 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         return;
       }
       
-      if (task.status === 'paused') {
-        // 暂停状态的任务使用恢复API
-        message.info('正在恢复暂停的任务...');
-        await tauriApi.resumePausedTask(taskId);
-        message.success('任务已恢复下载');
-      } else {
-        // 其他状态的任务使用普通下载API
-        message.info('任务开始下载，请稍候...');
-        tauriApi.executeDownloadTask(taskId)
-          .then(() => {
-            message.success('任务开始下载');
-          })
-          .catch((error) => {
-            console.error('开始下载失败:', error);
-            message.error('开始下载失败');
-          });
-      }
+      // 使用taskManager执行下载任务
+      message.info('任务开始下载，请稍候...');
+      await taskManager.executeDownloadTask(taskId.toString());
+      message.success('任务开始下载');
       
       loadTasks(); // 重新加载任务列表
     } catch (error) {
@@ -215,17 +205,87 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   /**
    * 停止下载任务
    */
-  const handleStopDownload = async (taskId: string) => {
+  const handleStopDownload = async (taskId: number) => {
     try {
       message.info('正在停止下载任务...');
-      await tauriApi.stopDownloadTask(taskId);
+      await taskManager.stopDownloadTask(taskId);
       message.success('下载任务已停止');
       loadTasks(); // 重新加载任务列表
-    } catch (error) {
+    } catch (error: any) {
       console.error('停止下载失败:', error);
       message.error('停止下载失败');
     }
   };
+
+  // 防抖更新任务列表
+  const debouncedUpdateTasks = useCallback(
+    (() => {
+      let timeoutId: number;
+      return () => {
+        clearTimeout(timeoutId);
+        timeoutId = window.setTimeout(() => {
+          updateTasksSilently();
+        }, 500);
+      };
+    })(),
+    []
+  );
+  
+  // 监听下载进度更新
+  const handleDownloadProgress = useCallback((data: any) => {
+    console.log('下载进度更新:', data);
+    
+    // 显示当前下载文件信息（如果有）
+    if (data.current_file && data.current_file.trim()) {
+      console.log(`正在下载: ${data.current_file} (${data.completed_files}/${data.total_files})`);
+    }
+    
+    // 防抖更新任务列表以更新进度
+    debouncedUpdateTasks();
+  }, [debouncedUpdateTasks]);
+  
+  // 监听下载完成
+  const handleDownloadComplete = useCallback((data: any) => {
+    console.log('下载完成:', data);
+    message.success(`任务下载完成！已完成 ${data.completed_files}/${data.total_files} 个文件`);
+    updateTasksSilently(); // 立即更新任务列表
+  }, []);
+  
+  // 监听下载错误
+  const handleDownloadError = useCallback((data: any) => {
+    console.log('下载错误:', data);
+    const errorMsg = data.error || '未知错误';
+    message.error(`任务下载失败: ${errorMsg}`);
+    updateTasksSilently(); // 立即更新任务列表
+  }, []);
+  
+  // 监听文件下载错误
+  const handleDownloadFileError = useCallback((data: any) => {
+    console.log('文件下载错误:', data);
+    const fileName = data.fileName || data.file_name || '未知文件';
+    const error = data.error || data.message || '未知错误';
+    message.warning(`文件下载失败: ${fileName} - ${error}`);
+    debouncedUpdateTasks(); // 防抖更新任务列表
+  }, [debouncedUpdateTasks]);
+
+  // 监听自动恢复单个任务
+  const handleAutoResumeTask = useCallback(async (data: any) => {
+    console.log('自动恢复下载任务:', data);
+    try {
+      if (await feishuApi.checkToken()) {
+        message.info(`正在恢复下载任务: ${data.taskName}`);
+        taskManager.executeDownloadTask(data.taskId.toString())
+          .then(() => {
+            updateTasksSilently(); // 静默更新任务列表
+          })
+          .catch((error) => {
+            console.error('自动恢复下载任务失败:', error);
+          });
+      }
+    } catch (error) {
+      console.error('自动恢复下载任务失败:', error);
+    }
+  }, []);
 
   /**
    * 组件挂载时加载数据
@@ -235,34 +295,6 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     loadTasks();
     
     let unlistenFunctions: (() => void)[] = [];
-    
-    // 监听下载进度更新
-    const handleDownloadProgress = (data: any) => {
-      console.log('下载进度更新:', data);
-      // message.info(`正在下载: ${data.current_file} (${data.completed_files}/${data.total_files})`);
-      updateTasksSilently(); // 静默更新任务列表以更新进度
-    };
-    
-    // 监听下载完成
-    const handleDownloadComplete = (data: any) => {
-      console.log('下载完成:', data);
-      message.success('下载任务完成！');
-      updateTasksSilently(); // 静默更新任务列表
-    };
-    
-    // 监听下载错误
-    const handleDownloadError = (data: any) => {
-      console.log('下载错误:', data);
-      message.error(`下载失败: ${data.error}`);
-      updateTasksSilently(); // 静默更新任务列表
-    };
-    
-    // 监听文件下载错误
-    const handleDownloadFileError = (data: any) => {
-      console.log('文件下载错误:', data);
-      message.error(`文件下载失败: ${data.fileName} - ${data.error}`);
-      updateTasksSilently(); // 静默更新任务列表
-    };
     
     // 监听恢复下载任务通知
     // const handleResumeDownloadTasks = (data: any) => {
@@ -274,41 +306,67 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     //   }
     // };
     
-    // 监听自动恢复单个任务
-    const handleAutoResumeTask = async (data: any) => {
-      console.log('自动恢复下载任务:', data);
-      try {
-        if (await tauriApi.checkLoginStatus()) {
-          message.info(`正在恢复下载任务: ${data.taskName}`);
-          tauriApi.executeDownloadTask(data.taskId)
-            .then(() => {
-              updateTasksSilently(); // 静默更新任务列表
-            })
-            .catch((error) => {
-              console.error('自动恢复下载任务失败:', error);
-            });
-        }
-      } catch (error) {
-        console.error('自动恢复下载任务失败:', error);
-      }
-    };
+
     
     // 注册事件监听器
     const setupListeners = async () => {
       try {
-        const unlistenProgress = await tauriApi.onDownloadProgress(handleDownloadProgress);
-        const unlistenComplete = await tauriApi.onDownloadComplete(handleDownloadComplete);
-        const unlistenError = await tauriApi.onDownloadError(handleDownloadError);
-        const unlistenFileError = await tauriApi.onDownloadFileError(handleDownloadFileError);
-        const unlistenAutoResume = await tauriApi.onAutoResumeTask(handleAutoResumeTask);
+        const { listen } = await import('@tauri-apps/api/event');
         
-        unlistenFunctions = [
+        // 监听下载进度事件
+        const unlistenProgress = await listen('download-progress', (event: any) => {
+          const data = event.payload;
+          console.log('收到下载进度事件:', data);
+          
+          // 根据事件状态处理不同逻辑
+          if (data.status === 'downloading') {
+            handleDownloadProgress(data);
+          } else if (data.status === 'completed') {
+            handleDownloadComplete(data);
+          } else if (data.status === 'failed') {
+            handleDownloadError(data);
+          }
+        });
+        
+        // 监听任务状态变化事件
+        const unlistenTaskStatus = await listen('task-status-changed', (event: any) => {
+          const data = event.payload;
+          console.log('收到任务状态变化事件:', data);
+          updateTasksSilently();
+        });
+        
+        // 监听文件下载错误事件
+        const unlistenFileError = await listen('file-download-error', (event: any) => {
+          const data = event.payload;
+          console.log('收到文件下载错误事件:', data);
+          handleDownloadFileError(data);
+        });
+        
+        // 监听任务完成事件
+        const unlistenTaskComplete = await listen('task-completed', (event: any) => {
+          const data = event.payload;
+          console.log('收到任务完成事件:', data);
+          message.success(`任务 "${data.taskName}" 已完成！`);
+          updateTasksSilently();
+        });
+        
+        // 监听任务失败事件
+        const unlistenTaskFailed = await listen('task-failed', (event: any) => {
+          const data = event.payload;
+          console.log('收到任务失败事件:', data);
+          message.error(`任务 "${data.taskName}" 下载失败: ${data.error || '未知错误'}`);
+          updateTasksSilently();
+        });
+        
+        unlistenFunctions.push(
           unlistenProgress,
-          unlistenComplete,
-          unlistenError,
+          unlistenTaskStatus,
           unlistenFileError,
-          unlistenAutoResume
-        ];
+          unlistenTaskComplete,
+          unlistenTaskFailed
+        );
+        
+        console.log('事件监听器设置完成');
       } catch (error) {
         console.error('设置事件监听器失败:', error);
       }
@@ -319,7 +377,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     // 设置定时器定期更新任务状态（仅在有下载任务时）
     const interval = setInterval(() => {
       // 只有在有正在下载的任务时才更新，避免不必要的滚动位置重置
-      if (tasks.some(task => task.status === 'downloading')) {
+      if (tasksRef.current.some(task => task.status === 'downloading')) {
         updateTasksSilently();
       }
     }, 3000); // 每3秒更新一次
@@ -335,7 +393,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         }
       });
     };
-  }, []);
+  }, [handleDownloadProgress, handleDownloadComplete, handleDownloadError, handleDownloadFileError, handleAutoResumeTask]);
 
   // 任务表格列定义
    const taskColumns = [
@@ -420,7 +478,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
                 icon={<StopOutlined />}
                 size="small"
                 type="default"
-                onClick={() => handleStopDownload(record.id)}
+                onClick={() => record.id && handleStopDownload(record.id)}
                 title="停止下载"
               >
                 停止
@@ -431,7 +489,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
                 icon={<PlayCircleOutlined />}
                 size="small"
                 type="primary"
-                onClick={() => handleStartDownload(record.id)}
+                onClick={() => record.id && handleStartDownload(record.id)}
                 title="恢复下载"
               >
                 恢复
@@ -442,7 +500,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
                 icon={<ReloadOutlined />}
                 size="small"
                 type="default"
-                onClick={() => handleRetryFailedFiles(record.id)}
+                onClick={() => record.id && handleRetryFailedFiles(record.id)}
                 title="重新下载失败的文件"
               >
                 重试失败
@@ -456,7 +514,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
            />
            <Popconfirm
              title="确定要删除这个任务吗？"
-             onConfirm={() => handleDeleteTask(record.id)}
+             onConfirm={() => record.id && handleDeleteTask(record.id)}
              okText="确定"
              cancelText="取消"
            >
@@ -485,7 +543,9 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
       dataIndex: 'type',
       key: 'type',
       width: '10%',
-      render: (type: string) => {
+      render: (type: string, record: DownloadFile) => {
+        const fileType = type === 'FeishuFile' ? (record.fileInfo as FeishuFile).type : (record.fileInfo as FeishuWikiNode).obj_type;
+        // console.log("fileType", fileType, "type", type, "fileInfo", record.fileInfo);
         const typeMap: { [key: string]: string } = {
           'file': '文件',
           'doc': '文档',
@@ -494,13 +554,13 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
           'bitable': '多维表格',
           'folder': '文件夹'
         };
-        return typeMap[type] || type;
+        return typeMap[fileType] || fileType;
       },
     },
     {
       title: '相对路径',
-      dataIndex: 'relativePath',
-      key: 'relativePath',
+      dataIndex: 'path',
+      key: 'path',
       width: '25%',
       render: (path: string) => (
         <Text ellipsis={{ tooltip: path }} style={{ maxWidth: 200 }}>
@@ -543,14 +603,14 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
        title: '操作',
        key: 'action',
        width: '20%',
-       render: (_: any, record: DownloadFile & { taskId: string }) => (
+       render: (_: any, record: DownloadFile & { taskId: number }) => (
          <Space>
            {record.status === 'failed' && (
              <Button
                icon={<ReloadOutlined />}
                size="small"
                type="primary"
-               onClick={() => handleRetryFile(record.taskId, record.token)}
+               onClick={() => handleRetryFile(record.taskId, (record.fileInfo as any).token)}
                title="重试下载"
              >
                重试
@@ -571,15 +631,15 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   /**
    * 重试下载单个文件
    */
-  const handleRetryFile = async (taskId: string, fileToken: string) => {
+  const handleRetryFile = async (taskId: number, fileToken: string) => {
     try {
-      if (!(await tauriApi.checkLoginStatus())) {
+      if (!(await feishuApi.checkToken())) {
         message.error('请先登录飞书账号');
         return;
       }
       
       message.info('正在重试下载文件...');
-      await tauriApi.retryDownloadFile(taskId, fileToken);
+      await taskManager.retryDownloadFile(taskId.toString(), fileToken, '');
       message.success('文件重试下载已开始');
       loadTasks(); // 重新加载任务列表
     } catch (error) {
@@ -591,7 +651,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   /**
    * 重试下载任务中所有失败的文件
    */
-  const handleRetryFailedFiles = async (taskId: string) => {
+  const handleRetryFailedFiles = async (taskId: number) => {
     try {
       // 找到对应的任务
       const task = tasks.find(t => t.id === taskId);
@@ -612,7 +672,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
       // 逐个重试失败的文件
       for (const file of failedFiles) {
         try {
-          await tauriApi.retryDownloadFile(taskId, file.token);
+          await taskManager.retryDownloadFile(taskId.toString(), (file.fileInfo as any).token, '');
         } catch (error) {
           console.error(`重试文件 ${file.name} 失败:`, error);
         }
@@ -634,12 +694,12 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
    * 展开行渲染函数 - 使用懒加载优化性能
    */
   const expandedRowRender = (record: DownloadTask) => {
-    const files = record.files || [];
+    const files = (record.files || []).filter(file => file.type === 'FeishuWikiNode' || file.type === 'FeishuFile');
     
     return (
       <LazyFileList 
         files={files} 
-        taskId={record.id}
+        taskId={record.id?.toString() || ''}
         fileColumns={fileColumns}
       />
     );
@@ -648,7 +708,6 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   // 任务列表懒加载状态
   const [taskDisplayCount, setTaskDisplayCount] = useState(10);
   const [taskIsLoading, setTaskIsLoading] = useState(false);
-  const taskScrollRef = useRef<HTMLDivElement>(null);
   
   // 当前显示的任务列表
   const displayedTasks = useMemo(() => {
