@@ -27,7 +27,7 @@
  */
 
 import { Channel, invoke } from '@tauri-apps/api/core'
-
+import  { AxiosAdapter } from 'axios';
 /**
  * 兼容非ISO-8859-1字符的Headers实现类
  * 提供与浏览器Headers接口相同的API，但支持UTF-8编码的header值
@@ -490,3 +490,125 @@ export async function fetch(
 
     return res
 }
+
+
+
+function buildFullPath(baseURL: string | undefined, requestedURL: string): string {
+    if (baseURL && !/^([a-z][a-z\d\+\-\.]*:)?\/\//i.test(requestedURL)) {
+        return baseURL.replace(/\/+$/, '') + '/' + requestedURL.replace(/^\/+/, '');
+    }
+    return requestedURL;
+}
+
+function buildURL(url: string, params?: Record<string, any>): string {
+    if (!params) return url;
+
+    const queryString = Object.entries(params)
+        .map(([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`)
+        .join('&');
+
+    if (!queryString) return url;
+
+    const separator = url.includes('?') ? '&' : '?';
+    return url + separator + queryString;
+}
+/**
+ * 创建Tauri适配器，用于axios与Tauri的fetch API集成
+ */
+const createTauriAdapter = (): AxiosAdapter => {
+    return async (config) => {
+        // 处理baseURL和相对路径的拼接
+        let url = config.url!;
+        if (config.baseURL && !url.startsWith('http')) {
+            url = buildURL(buildFullPath(config.baseURL, config.url!), config.params)
+        } else {
+            url = buildURL(url, config.params)
+        }
+
+
+        const method = config.method?.toUpperCase() || 'GET';
+        const headers = config.headers || {};
+        const data = config.data;
+        const responseType = config.responseType || 'json';
+
+        try {
+            console.log("createTauriAdapter url", url, "method", method, "headers", headers, "data", data, "data type", typeof data);
+
+            // 处理请求体数据
+            let body: string | undefined;
+            if (data) {
+                if (typeof data === 'string') {
+                    body = data;
+                } else {
+                    body = JSON.stringify(data);
+                }
+            }
+
+            const response = await fetch(url, {
+                method,
+                headers,
+                body,
+            });
+            console.log("createTauriAdapter response", response.clone());
+            let responseData;
+
+            // 根据responseType处理响应数据
+            switch (responseType) {
+                case 'arraybuffer':
+                    responseData = await response.arrayBuffer();
+                    break;
+                case 'blob':
+                    responseData = await response.blob();
+                    break;
+                case 'formdata':
+                    responseData = await response.formData();
+                    break;
+                case 'text':
+                    responseData = await response.text();
+                    break;
+                case 'json':
+                    const textData = await response.text();
+                    try {
+                        responseData = JSON.parse(textData);
+                    } catch {
+                        responseData = textData;
+                    }
+                    break;
+                default:
+                    throw new Error('Response type unsupported type: ' + responseType)
+            }
+
+            // 检查 HTTP 状态码
+            if (!response.ok) {
+                // console.log("createTauriAdapter responseData", response.clone());
+                const error: any = new Error(`Request failed with status code ${response.status}`);
+                error.config = config;
+                error.request = {};
+                error.response = {
+                    data: responseData,
+                    status: response.status,
+                    statusText: response.statusText || '',
+                    headers: Object.fromEntries(response.headers.entries()),
+                    config,
+                    request: {},
+                };
+                throw error;
+            }
+
+            return {
+                data: responseData,
+                status: response.status,
+                statusText: response.statusText || '',
+                headers: Object.fromEntries(response.headers.entries()),
+                config,
+                request: {},
+            };
+        } catch (error) {
+            console.log("createTauriAdapter error", error);
+            if (error instanceof Error) {
+                console.log("createTauriAdapter error", error, error.stack);
+            }
+            throw error;
+        }
+    };
+  };

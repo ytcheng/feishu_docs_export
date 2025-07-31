@@ -3,6 +3,8 @@
  * 基于 Rust 版本的 types.rs 实现
  */
 
+import { FeishuFile, FeishuWikiNode, FeishuWikiSpace } from ".";
+
 /**
  * API 响应结构体
  */
@@ -65,17 +67,17 @@ export interface FeishuFileShortcutInfo {
 /**
  * 飞书文件结构体
  */
-export interface FeishuFile {
-  token: string;
-  name: string;
-  type: string;
-  parent_token?: string;
-  url?: string;
-  shortcut_info?: FeishuFileShortcutInfo;
-  created_time?: string;
-  modified_time?: string;
-  owner_id?: string;
-}
+// export interface FeishuFile {
+//   token: string;
+//   name: string;
+//   type: string;
+//   parent_token?: string;
+//   url?: string;
+//   shortcut_info?: FeishuFileShortcutInfo;
+//   created_time?: string;
+//   modified_time?: string;
+//   owner_id?: string;
+// }
 
 /**
  * 飞书文件分页结构体
@@ -86,36 +88,36 @@ export interface FeishuFilesPagination {
   has_more: boolean;
 }
 
-/**
- * 飞书知识库根节点
- */
-export interface FeishuWikiRoot {
-  name: string;
-}
+// /**
+//  * 飞书知识库根节点
+//  */
+// export interface FeishuWikiRoot {
+//   name: string;
+// }
 
-/**
- * 飞书文件夹结构体
- */
-export interface FeishuFolder {
-  token: string;
-  name: string;
-  parent_token?: string;
-  url?: string;
-  created_time?: string;
-  modified_time?: string;
-}
+// /**
+//  * 飞书文件夹结构体
+//  */
+// export interface FeishuFolder {
+//   token: string;
+//   name: string;
+//   parent_token?: string;
+//   url?: string;
+//   created_time?: string;
+//   modified_time?: string;
+// }
 
-/**
- * 飞书知识库空间结构体
- */
-export interface FeishuWikiSpace {
-  space_id: string;
-  name: string;
-  description?: string;
-  visibility?: string;
-  space_type: string;
-  open_sharing: string;
-}
+// /**
+//  * 飞书知识库空间结构体
+//  */
+// export interface FeishuWikiSpace {
+//   space_id: string;
+//   name: string;
+//   description?: string;
+//   visibility?: string;
+//   space_type: string;
+//   open_sharing: string;
+// }
 
 /**
  * 飞书知识库空间分页结构体
@@ -126,27 +128,27 @@ export interface FeishuWikiSpacesPagination {
   has_more: boolean;
 }
 
-/**
- * 飞书知识库节点结构体
- */
-export interface FeishuWikiNode {
-  space_id: string;
-  node_token: string;
-  obj_token: string;
-  obj_type: string;
-  parent_node_token?: string;
-  node_type: string;
-  origin_node_token?: string;
-  origin_space_id?: string;
-  has_child?: boolean;
-  title: string;
-  obj_create_time?: string;
-  obj_edit_time?: string;
-  node_create_time?: string;
-  creator?: string;
-  owner?: string;
-  node_creator?: string;
-}
+// /**
+//  * 飞书知识库节点结构体
+//  */
+// export interface FeishuWikiNode {
+//   space_id: string;
+//   node_token: string;
+//   obj_token: string;
+//   obj_type: string;
+//   parent_node_token?: string;
+//   node_type: string;
+//   origin_node_token?: string;
+//   origin_space_id?: string;
+//   has_child?: boolean;
+//   title: string;
+//   obj_create_time?: string;
+//   obj_edit_time?: string;
+//   node_create_time?: string;
+//   creator?: string;
+//   owner?: string;
+//   node_creator?: string;
+// }
 
 /**
  * 飞书知识库节点分页结构体
@@ -157,16 +159,16 @@ export interface FeishuWikiNodesPagination {
   has_more: boolean;
 }
 
-/**
- * 飞书树节点联合类型
- */
-export type FeishuTreeNode = 
-  | { type: 'FeishuRootMeta'; fileItem: FeishuRootMeta }
-  | { type: 'FeishuFile'; fileItem: FeishuFile }
-  | { type: 'FeishuFolder'; fileItem: FeishuFolder }
-  | { type: 'FeishuWikiRoot'; fileItem: FeishuWikiRoot }
-  | { type: 'FeishuWikiSpace'; fileItem: FeishuWikiSpace }
-  | { type: 'FeishuWikiNode'; fileItem: FeishuWikiNode };
+// /**
+//  * 飞书树节点联合类型
+//  */
+// export type FeishuTreeNode = 
+//   | { type: 'FeishuRootMeta'; fileItem: FeishuRootMeta }
+//   | { type: 'FeishuFile'; fileItem: FeishuFile }
+//   | { type: 'FeishuFolder'; fileItem: FeishuFolder }
+//   | { type: 'FeishuWikiRoot'; fileItem: FeishuWikiRoot }
+//   | { type: 'FeishuWikiSpace'; fileItem: FeishuWikiSpace }
+//   | { type: 'FeishuWikiNode'; fileItem: FeishuWikiNode };
 
 /**
  * 飞书树节点包装器
