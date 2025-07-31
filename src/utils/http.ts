@@ -515,7 +515,7 @@ function buildURL(url: string, params?: Record<string, any>): string {
 /**
  * 创建Tauri适配器，用于axios与Tauri的fetch API集成
  */
-const createTauriAdapter = (): AxiosAdapter => {
+export const createTauriAdapter = (): AxiosAdapter => {
     return async (config) => {
         // 处理baseURL和相对路径的拼接
         let url = config.url!;

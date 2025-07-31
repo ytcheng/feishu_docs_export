@@ -19,6 +19,7 @@ import {
   WikiNodeQueryOptions,
 } from '../types/feishuApi';
 import { FeishuFile, FeishuWikiNode, FeishuWikiSpace } from '../types';
+import { createTauriAdapter } from './http';
 const FEISHU_SCOPE = 'docs:doc docs:document.media:download docs:document:export docx:document drive:drive drive:file drive:file:download offline_access';
 
 /**
@@ -598,6 +599,3 @@ export class FeishuApi {
 
 export const feishuApi = FeishuApi.getInstance();
 
-function createTauriAdapter(): (import("axios").AxiosAdapter | ("fetch" | "xhr" | "http" | (string & {}))) | (import("axios").AxiosAdapter | ("fetch" | "xhr" | "http" | (string & {})))[] | undefined {
-  throw new Error('Function not implemented.');
-}
