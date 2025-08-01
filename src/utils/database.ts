@@ -5,7 +5,7 @@ import {
   TaskStatus,
   FileStatus
 } from '../types/database';
-import { FeishuFile, FeishuFolder, FeishuRootMeta, FeishuWikiNode, FeishuWikiRoot, FeishuWikiSpace, FileItem } from '../types';
+import { FileItem } from '../types';
 
 /**
  * 数据库操作类

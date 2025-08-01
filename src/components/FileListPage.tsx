@@ -240,7 +240,7 @@ const FileListPage: React.FC<FileListPageProps> = ({ taskId, taskName, onGoBack 
       }
 
       message.info('正在重试下载文件...');
-      await taskManager.retryDownloadFile(taskId.toString(), fileToken, '');
+      await taskManager.retryDownloadFile(taskId.toString(), fileToken);
       message.success('文件重试下载已开始');
     } catch (error) {
       console.error('重试下载文件失败:', error);

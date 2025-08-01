@@ -28,7 +28,7 @@ interface AuthData {
  * 飞书授权页面组件属性
  */
 interface AuthPageProps {
-  onAuth: (token: string) => void;
+  onAuth: () => void;
   onGoToSettings?: () => void;
 }
 
@@ -73,7 +73,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuth, onGoToSettings }) => {
       message.success('授权成功！');
       
       // 授权成功，展示主界面
-      authCallbackRef.current(authData.access_token);
+      authCallbackRef.current();
     } catch (error) {
       console.error('授权失败:', error);
       message.error('授权失败，请重试');

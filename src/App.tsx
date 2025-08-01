@@ -26,7 +26,7 @@ const App: React.FC = () => {
    * 处理授权成功回调
    * @param token - 获取到的access_token
    */
-  const handleAuth = async (token: string) => {
+  const handleAuth = async () => {
     // setAccessToken(token);
     setAuthed(true);
     
