@@ -166,6 +166,39 @@ button {
   margin-right: 5px;
 }
 
+/* 设置页面输入框样式 */
+.custom-input.ant-input,
+.custom-input.ant-input-affix-wrapper,
+.custom-input .ant-input {
+  box-shadow: none !important;
+  border: 1px solid #d9d9d9 !important;
+}
+.custom-input.ant-input:focus,
+.custom-input.ant-input-affix-wrapper:focus,
+.custom-input.ant-input-affix-wrapper-focused,
+.custom-input .ant-input:focus {
+  box-shadow: none !important;
+  border-color: #1890ff !important;
+  outline: none !important;
+}
+.custom-input.ant-input:hover,
+.custom-input.ant-input-affix-wrapper:hover,
+.custom-input .ant-input:hover {
+  box-shadow: none !important;
+  border-color: #40a9ff !important;
+}
+/* 特别处理密码输入框的框中框问题 */
+.custom-input.ant-input-affix-wrapper .ant-input {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+.custom-input.ant-input-affix-wrapper .ant-input:focus {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f6f6f6;

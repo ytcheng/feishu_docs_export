@@ -4,11 +4,12 @@ import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import AuthPage from './components/AuthPage';
 import HomePage from './components/HomePage';
 import TaskListPage from './components/TaskListPage';
+import SettingsPage from './components/SettingsPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { UserInfo } from './types';
 import './App.css';
-import { feishuApi } from './utils/feishuApi';
-import { resumeDownloadingTasks } from './utils/taskManager';
+import { feishuApi, FeishuApi, FeishuConfig } from './utils/feishuApi';
+import { activeDownloadsManager, resumeDownloadingTasks } from './utils/taskManager';
 
 const { Header, Content } = Layout;
 const { Text } = Typography;
@@ -16,7 +17,8 @@ const { Text } = Typography;
 const App: React.FC = () => {
   const [authed, setAuthed] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  const [currentPage, setCurrentPage] = useState<'home' | 'list'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'list' | 'settings' | 'auth'>('home');
+  const [hasValidConfig, setHasValidConfig] = useState(false);
 
   /**
    * 处理授权成功回调
@@ -55,16 +57,38 @@ const App: React.FC = () => {
     localStorage.removeItem('feishu_user_info');
     setUserInfo(null);
     setAuthed(false);
+    activeDownloadsManager.stopAll();
     console.log('已退出登录');
   };
 
 
 
+  /**
+   * 处理配置保存
+   */
+  const handleConfigSaved = (config: FeishuConfig) => {
+    // 重新设置 feishuApi 实例
+    FeishuApi.resetInstance(config);
+    setHasValidConfig(true);
+    setCurrentPage('auth');
+  };
+
   useEffect(() => {
     const initializeApp = async () => {
-      // tauriApi.onLoginExpire(handleLogout);
+      // 检查是否有有效配置
+      const configValid = FeishuApi.hasValidConfig();
+      setHasValidConfig(configValid);
+      
+      if (!configValid) {
+        // 没有有效配置，跳转到设置页面
+        setCurrentPage('settings');
+        return;
+      }
+      
+      // 有配置，检查token
       if (await feishuApi.checkToken()) {
         setAuthed(true);
+        setCurrentPage('home');
         
         // 加载用户信息
         const userInfoStr = localStorage.getItem('feishu_user_info');
@@ -87,6 +111,9 @@ const App: React.FC = () => {
         } catch (error) {
           console.error('应用启动时恢复下载任务失败:', error);
         }
+      } else {
+        // 有配置但没有有效token，跳转到登录页面
+        setCurrentPage('auth');
       }
     };
     
@@ -122,12 +149,31 @@ const App: React.FC = () => {
     };
   }, []);
 
-  if (!authed) {
+  // 根据当前页面状态渲染不同组件
+  if (currentPage === 'settings') {
     return (
       <ConfigProvider>
         <AntdApp>
           <ErrorBoundary>
-            <AuthPage onAuth={handleAuth} />
+            <SettingsPage 
+              onConfigSaved={handleConfigSaved}
+              onBack={hasValidConfig ? () => setCurrentPage('auth') : undefined}
+            />
+          </ErrorBoundary>
+        </AntdApp>
+      </ConfigProvider>
+    );
+  }
+
+  if (currentPage === 'auth' || !authed) {
+    return (
+      <ConfigProvider>
+        <AntdApp>
+          <ErrorBoundary>
+            <AuthPage 
+              onAuth={handleAuth} 
+              onGoToSettings={() => setCurrentPage('settings')}
+            />
           </ErrorBoundary>
         </AntdApp>
       </ConfigProvider>

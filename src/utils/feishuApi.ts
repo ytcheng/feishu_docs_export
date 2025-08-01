@@ -23,6 +23,15 @@ import { createTauriAdapter } from './http';
 const FEISHU_SCOPE = 'docs:doc docs:document.media:download docs:document:export docx:document drive:drive drive:file drive:file:download offline_access';
 
 /**
+ * 飞书配置接口
+ */
+export interface FeishuConfig {
+  appId: string;
+  appSecret: string;
+  endpoint: string;
+}
+
+/**
  * 飞书API客户端类
  * 基于axios和Tauri实现的飞书API封装
  */
@@ -110,19 +119,84 @@ export class FeishuApi {
   }
 
   /**
+   * 从 localStorage 加载飞书配置
+   */
+  static loadConfig(): FeishuConfig {
+    try {
+      const configStr = localStorage.getItem('feishu_config');
+      if (configStr) {
+        const config = JSON.parse(configStr);
+        // 验证配置完整性
+        if (config.appId && config.appSecret && config.endpoint) {
+          return config;
+        }
+      }
+    } catch (error) {
+      console.error('加载飞书配置失败:', error);
+    }
+    
+    // 返回默认配置
+    return {
+      appId: 'cli_a1ad86f33c38500d',
+      appSecret: 'iNw9h4HWv10gsyk0ZbOejhJs7YwHVQo3',
+      endpoint: 'https://open.feishu.cn/open-apis'
+    };
+  }
+
+  /**
+   * 检查是否存在有效的飞书配置
+   */
+  static hasValidConfig(): boolean {
+    try {
+      const configStr = localStorage.getItem('feishu_config');
+      if (configStr) {
+        const config = JSON.parse(configStr);
+        return !!(config.appId && config.appSecret && config.endpoint);
+      }
+    } catch (error) {
+      console.error('检查飞书配置失败:', error);
+    }
+    return false;
+  }
+
+  /**
    * 获取单例实例
    */
   static getInstance(): FeishuApi {
     if (!FeishuApi.instance) {
-      const option = {
-        appId: 'cli_a1ad86f33c38500d',
-        appSecret: 'iNw9h4HWv10gsyk0ZbOejhJs7YwHVQo3',
-        endpoint: 'https://open.feishu.cn/open-apis',
-      }
-      FeishuApi.instance = new FeishuApi(option);
+      const config = FeishuApi.loadConfig();
+      FeishuApi.instance = new FeishuApi(config);
       FeishuApi.instance.readToken();
     }
     return FeishuApi.instance;
+  }
+
+  /**
+   * 重新设置实例配置
+   * @param config 新的配置
+   */
+  static resetInstance(config: FeishuConfig): void {
+    if (FeishuApi.instance) {
+      FeishuApi.instance.updateConfig(config);
+    } else {
+      FeishuApi.instance = new FeishuApi(config);
+      FeishuApi.instance.readToken();
+    }
+  }
+
+  /**
+   * 更新当前实例的配置
+   * @param config 新的配置
+   */
+  updateConfig(config: FeishuConfig): void {
+    this.appId = config.appId;
+    this.appSecret = config.appSecret;
+    this.endpoint = config.endpoint;
+    
+    // 更新 httpClient 的 baseURL
+    this.httpClient.defaults.baseURL = this.endpoint;
+    
+    console.log('飞书API配置已更新:', config);
   }
 
   /**

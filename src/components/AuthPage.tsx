@@ -25,10 +25,18 @@ interface AuthData {
 }
 
 /**
+ * 飞书授权页面组件属性
+ */
+interface AuthPageProps {
+  onAuth: (token: string) => void;
+  onGoToSettings?: () => void;
+}
+
+/**
  * 飞书授权页面组件
  * 适配Tauri版本
  */
-const AuthPage: React.FC<{ onAuth: (token: string) => void }> = ({ onAuth }) => {
+const AuthPage: React.FC<AuthPageProps> = ({ onAuth, onGoToSettings }) => {
   const { message } = App.useApp();
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const qrContainerRef = useRef<HTMLDivElement>(null);
@@ -314,6 +322,21 @@ const AuthPage: React.FC<{ onAuth: (token: string) => void }> = ({ onAuth }) => 
         >
           {!scriptLoaded && <span style={{ color: '#999' }}>正在加载二维码...</span>}
         </div>
+        
+        {/* 设置链接 */}
+        {onGoToSettings && (
+          <div style={{ marginTop: '16px', borderTop: '1px solid #f0f0f0', paddingTop: '16px' }}>
+            <Paragraph type="secondary" style={{ fontSize: '12px', marginBottom: '8px' }}>
+              需要修改应用信息？
+            </Paragraph>
+            <a 
+              onClick={onGoToSettings}
+              style={{ cursor: 'pointer', color: '#1890ff' }}
+            >
+              前往设置
+            </a>
+          </div>
+        )}
       </Card>
     </div>
   );
