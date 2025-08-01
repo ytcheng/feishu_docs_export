@@ -48,6 +48,9 @@ export class FeishuApi {
     this.httpClient = axios.create({
       baseURL: this.endpoint,
       timeout: 30000,
+      validateStatus(status) {
+        return status >= 200 && status < 400;
+      },
       adapter: createTauriAdapter(),
     });
 
@@ -80,6 +83,7 @@ export class FeishuApi {
       },
       async (error) => {
         console.log("error", error);
+        console.log("error", error.response.data);
         const originalRequest = error.config;
         
         // 如果是401错误且还没有重试过，尝试刷新token
@@ -97,8 +101,10 @@ export class FeishuApi {
             throw refreshError;
           }
         }
-        
-        return Promise.reject(error);
+        console.log("error.response.data.msg", error.response.data.msg, "error.response.data.message", error.response.data.message, "error.response.data.error", error.response.data.error, "error.response.data.error_description", error.response.data.error_description);
+        const errorMessage = error.response.data.msg ? error.response.data.msg || error.response.data.message || 'Unknown error' : error.response.data.error + ":" + error.response.data.error_description;
+        console.log("errorMessage", errorMessage);  
+        return Promise.reject(new Error(errorMessage));
       }
     );
   }

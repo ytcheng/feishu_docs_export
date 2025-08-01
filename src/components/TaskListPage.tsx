@@ -522,7 +522,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
       // 逐个重试失败的文件
       for (const file of failedFiles) {
         try {
-          await taskManager.retryDownloadFile(taskId.toString(), (file.fileInfo as any).token, '');
+          await taskManager.retryDownloadFile(taskId.toString(), (file.fileInfo as any).token);
         } catch (error) {
           console.error(`重试文件 ${file.name} 失败:`, error);
         }

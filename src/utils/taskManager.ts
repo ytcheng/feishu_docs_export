@@ -47,6 +47,7 @@ class ActiveDownloadsManager {
 
   isAborted(taskId: number): boolean {
     const controller = this.activeDownloads.get(taskId);
+    console.log("ActiveDownloadsManager isAborted", controller)
     return controller?.signal.aborted || false;
   }
 
@@ -618,39 +619,21 @@ async function downloadFileBatch(taskId: number, files: DownloadFile[]): Promise
       });
 
       // 执行文件下载
-      const success = await downloadFile(file, task.outputPath);
+      await downloadFile(file, task.outputPath);
 
-      if (success) {
-        // 更新文件状态为已完成
-        await databaseManager.updateFileStatus(
-           file.id!,
-           FileStatus.COMPLETED
-         );
-         
-        // 发送文件状态变化事件
-        await emit('file-status-changed', {
-          task_id: taskId,
-          file_id: file.id!,
-          file_name: file.name,
-          status: FileStatus.COMPLETED
-        });
-      } else {
-        // 更新文件状态为失败
-        await databaseManager.updateFileStatus(
-           file.id!,
-           FileStatus.FAILED,
-           'Download failed'
-         );
-         
-        // 发送文件状态变化事件
-        await emit('file-status-changed', {
-          task_id: taskId,
-          file_id: file.id!,
-          file_name: file.name,
-          status: FileStatus.FAILED,
-          error: 'Download failed'
-        });
-      }
+      // 更新文件状态为已完成
+      await databaseManager.updateFileStatus(
+         file.id!,
+         FileStatus.COMPLETED
+       );
+       
+      // 发送文件状态变化事件
+      await emit('file-status-changed', {
+        task_id: taskId,
+        file_id: file.id!,
+        file_name: file.name,
+        status: FileStatus.COMPLETED
+      });
 
       // 发送进度更新事件
       await updateTaskProgress(taskId);
@@ -754,61 +737,54 @@ async function finalizeTask(taskId: number): Promise<void> {
  */
 async function downloadFile(file: DownloadFile, outputPath: string): Promise<boolean> {
   console.log('downloadFile', file);
-  try {
-    let fileType: string;
-    let fileToken: string;
+  let fileType: string;
+  let fileToken: string;
+  
+  // 根据文件类型获取真正的文件类型和token
+  if (file.type === 'FeishuFile') {
+    const fileInfo = file.fileInfo as FeishuFile;
     
-    // 根据文件类型获取真正的文件类型和token
-    if (file.type === 'FeishuFile') {
-      const fileInfo = file.fileInfo as FeishuFile;
-      
-      // 处理快捷方式
-      if (fileInfo.type === 'shortcut' && fileInfo.shortcut_info) {
-        fileType = fileInfo.shortcut_info.target_type;
-        fileToken = fileInfo.shortcut_info.target_token;
-      } else {
-        fileType = fileInfo.type;
-        fileToken = fileInfo.token;
-      }
-    } else if (file.type === 'FeishuWikiNode') {
-      const fileInfo = file.fileInfo as FeishuWikiNode;
-      fileType = fileInfo.obj_type;
-      fileToken = fileInfo.obj_token;
+    // 处理快捷方式
+    if (fileInfo.type === 'shortcut' && fileInfo.shortcut_info) {
+      fileType = fileInfo.shortcut_info.target_type;
+      fileToken = fileInfo.shortcut_info.target_token;
     } else {
-      console.log(`跳过不支持的文件类型1: ${file.type}`);
-      return true;
+      fileType = fileInfo.type;
+      fileToken = fileInfo.token;
     }
+  } else if (file.type === 'FeishuWikiNode') {
+    const fileInfo = file.fileInfo as FeishuWikiNode;
+    fileType = fileInfo.obj_type;
+    fileToken = fileInfo.obj_token;
+  } else {
+    throw new Error(`不支持的文件类型: ${file.type}`);
+  }
+  
+  // 根据文件类型进行下载
+  if (fileType === 'file') {
+    // 直接下载文件
+    const filePath = await join(outputPath, file.path, file.name);
+    await feishuApi.downloadFileToPath(fileToken, filePath);
+    return true;
+  } else if (['doc', 'docx', 'sheet', 'bitable'].includes(fileType)) {
+    // 需要先导出再下载的文件类型
+    const exportTask = await feishuApi.createExportTask({
+      token: fileToken,
+      file_extension: getDefaultExtension(fileType),
+      type: fileType
+    });
     
-    // 根据文件类型进行下载
-    if (fileType === 'file') {
-      // 直接下载文件
-      const filePath = await join(outputPath, file.path, file.name);
-      await feishuApi.downloadFileToPath(fileToken, filePath);
-      return true;
-    } else if (['doc', 'docx', 'sheet', 'bitable', 'slides', 'mindnote'].includes(fileType)) {
-      // 需要先导出再下载的文件类型
-      const exportTask = await feishuApi.createExportTask({
-        token: fileToken,
-        file_extension: getDefaultExtension(fileType),
-        type: fileType
-      });
-      
-        const exportResult = await feishuApi.waitForExportTask(exportTask.ticket, fileToken);
-      
-      const extension = getDefaultExtension(fileType);
-      const fileName = `${file.name}.${extension}`;
-      const filePath = await join(outputPath, file.path, fileName);
-      
-      await feishuApi.downloadExportFileToPath(exportResult.file_token, filePath);
-      
-      return true;
-    } else {
-      console.log(`跳过不支持的文件类型2: ${fileType}`);
-      return true;
-    }
-  } catch (error) {
-    console.error(`下载文件失败: ${file.name}`, error);
-    return false;
+      const exportResult = await feishuApi.waitForExportTask(exportTask.ticket, fileToken);
+    
+    const extension = getDefaultExtension(fileType);
+    const fileName = `${file.name}.${extension}`;
+    const filePath = await join(outputPath, file.path, fileName);
+    
+    await feishuApi.downloadExportFileToPath(exportResult.file_token, filePath);
+    
+    return true;
+  } else {
+    throw new Error(`不支持的文件类型: ${fileType}`);
   }
 }
 
@@ -933,9 +909,7 @@ function getDefaultExtension(fileType: string): string {
     'doc': 'docx',
     'docx': 'docx',
     'sheet': 'xlsx',
-    'bitable': 'xlsx',
-    'mindnote': 'pdf',
-    'slides': 'pptx',
+    'bitable': 'xlsx'
   };
   
   return extensionMap[fileType] || 'pdf';
