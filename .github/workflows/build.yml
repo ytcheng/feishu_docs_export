@@ -63,4 +63,4 @@ jobs:
           ENABLE_CODE_SIGNING: ${{ secrets.MAC_CERT && github.event_name != 'pull_request' }}
           APPLE_CERTIFICATE: ${{ secrets.MAC_CERT }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-        run: npm run tauri build
+        run: npm run tauri build -- --no-bundle
