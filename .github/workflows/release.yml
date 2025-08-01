@@ -82,3 +82,4 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+          version: ${{ github.ref_name }}
