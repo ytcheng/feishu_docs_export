@@ -1,6 +1,7 @@
 import axios, { AxiosInstance} from 'axios';
 import { exists, mkdir, writeFile } from '@tauri-apps/plugin-fs';
 import { dirname } from '@tauri-apps/api/path';
+import { emit } from '@tauri-apps/api/event';
 import {
   TokenInfo,
   UserInfo,
@@ -20,6 +21,7 @@ import {
 } from '../types/feishuApi';
 import { FeishuFile, FeishuWikiNode, FeishuWikiSpace } from '../types';
 import { createTauriAdapter } from './http';
+import { TokenExpiredEvent } from '../types/event';
 const FEISHU_SCOPE = 'docs:doc docs:document.media:download docs:document:export docx:document drive:drive drive:file drive:file:download offline_access';
 
 /**
@@ -41,8 +43,7 @@ export class FeishuApi {
   private appId: string;
   private appSecret: string;
   private endpoint: string;
-  private accessToken?: string;
-  private refreshToken?: string;
+  private tokenInfo?: TokenInfo;
 
   /**
    * 构造函数
@@ -67,8 +68,8 @@ export class FeishuApi {
     this.httpClient.interceptors.request.use(
       (config) => {
         console.log("this.httpClient.interceptors.request config", config);
-        if (this.accessToken && !config.headers['Authorization']) {
-          config.headers['Authorization'] = `Bearer ${this.accessToken}`;
+        if (this.tokenInfo?.access_token && !config.headers['Authorization']) {
+          config.headers['Authorization'] = `Bearer ${this.tokenInfo.access_token}`;
           config.headers['Content-Type'] = 'application/json';
         }
         return config;
@@ -102,11 +103,12 @@ export class FeishuApi {
           try {
             await this.refreshAccessToken();
             // 重新设置Authorization头
-            originalRequest.headers['Authorization'] = `Bearer ${this.accessToken}`;
+            originalRequest.headers['Authorization'] = `Bearer ${this.tokenInfo?.access_token}`;
             return this.httpClient(originalRequest);
           } catch (refreshError) {
-            // 刷新失败，清除token
+            // 刷新失败，清除token并发出事件
             await this.removeToken();
+            await this.emitTokenExpired('Token refresh failed in response interceptor');
             throw refreshError;
           }
         }
@@ -199,6 +201,24 @@ export class FeishuApi {
   }
 
   /**
+   * 发射token过期事件
+   * @param message 过期消息
+   */
+  private async emitTokenExpired(message: string): Promise<void> {
+    const event: TokenExpiredEvent = {
+      message,
+      timestamp: Date.now()
+    };
+    
+    try {
+      await emit('token-expired', event);
+      console.log('Token expired event emitted:', event);
+    } catch (error) {
+      console.error('Failed to emit token expired event:', error);
+    }
+  }
+
+  /**
    * 读取保存的token信息
    */
   async readToken(): Promise<TokenInfo | null> {
@@ -211,8 +231,7 @@ export class FeishuApi {
       
       const tokenInfo: TokenInfo = JSON.parse(tokenStr);
       
-      this.accessToken = tokenInfo.access_token;
-      this.refreshToken = tokenInfo.refresh_token;
+      this.tokenInfo = tokenInfo;
       
       return tokenInfo;
     } catch (error) {
@@ -230,8 +249,7 @@ export class FeishuApi {
       tokenInfo.expires_at = Math.floor(Date.now() / 1000) + tokenInfo.refresh_expires_in;
       localStorage.setItem('feishu_token', JSON.stringify(tokenInfo));
       
-      this.accessToken = tokenInfo.access_token;
-      this.refreshToken = tokenInfo.refresh_token;
+      this.tokenInfo = tokenInfo;
     } catch (error) {
       console.error('Failed to save token:', error);
       throw error;
@@ -245,8 +263,7 @@ export class FeishuApi {
     try {
       localStorage.removeItem('feishu_token');
       
-      this.accessToken = undefined;
-      this.refreshToken = undefined;
+      this.tokenInfo = undefined;
     } catch (error) {
       console.error('Failed to remove token:', error);
     }
@@ -297,23 +314,39 @@ export class FeishuApi {
    * 刷新访问令牌
    */
   async refreshAccessToken(): Promise<TokenInfo> {
-    if (!this.refreshToken) {
+    if (!this.tokenInfo?.refresh_token) {
+      await this.emitTokenExpired('No refresh token available');
       throw new Error('No refresh token available');
     }
 
-    const response = await this.httpClient.post<TokenInfo>(
-      'https://passport.feishu.cn/suite/passport/oauth/token',
-      {
-        client_id: this.appId,
-        client_secret: this.appSecret,
-        grant_type: 'refresh_token',
-        refresh_token: this.refreshToken,
+    // 检查refresh token是否过期
+    if (this.tokenInfo.expires_at) {
+      const now = Math.floor(Date.now() / 1000);
+      if (this.tokenInfo.expires_at <= now) {
+        await this.emitTokenExpired('Refresh token has expired');
+        throw new Error('Refresh token has expired');
       }
-    );
+    }
 
-     const tokenInfo = response.data;
-     await this.saveToken(tokenInfo);
-     return tokenInfo;
+    try {
+      const response = await this.httpClient.post<TokenInfo>(
+        'https://passport.feishu.cn/suite/passport/oauth/token',
+        {
+          client_id: this.appId,
+          client_secret: this.appSecret,
+          grant_type: 'refresh_token',
+          refresh_token: this.tokenInfo.refresh_token,
+        }
+      );
+
+      const newTokenInfo = response.data;
+      await this.saveToken(newTokenInfo);
+      return newTokenInfo;
+    } catch (error) {
+      // 如果刷新失败，发出token过期事件
+      await this.emitTokenExpired('Failed to refresh access token');
+      throw error;
+    }
   }
 
   /**
@@ -584,7 +617,7 @@ export class FeishuApi {
       const response = await this.httpClient.get(`/drive/v1/export_tasks/file/${fileToken}/download`, {
         responseType: 'arraybuffer',
         headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
+          'Authorization': `Bearer ${this.tokenInfo?.access_token}`,
           'Content-Type': 'application/json',
           'Accept': 'application/octet-stream'
         },
@@ -640,7 +673,7 @@ export class FeishuApi {
       const response = await this.httpClient.get(`/drive/v1/files/${fileToken}/download`, {
         responseType: 'arraybuffer',
         headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
+          'Authorization': `Bearer ${this.tokenInfo?.access_token}`,
           'Content-Type': 'application/json',
         },
         // 对于文件下载，我们不需要经过响应拦截器的API错误处理

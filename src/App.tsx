@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Avatar, Dropdown, Typography, Space, ConfigProvider, App as AntdApp } from 'antd';
 import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
+import { listen } from '@tauri-apps/api/event';
 import AuthPage from './components/AuthPage';
 import HomePage from './components/HomePage';
 import TaskListPage from './components/TaskListPage';
 import SettingsPage from './components/SettingsPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { UserInfo } from './types';
+import { TokenExpiredEvent } from './types/event';
 import './App.css';
 import { feishuApi, FeishuApi, FeishuConfig } from './utils/feishuApi';
 import { activeDownloadsManager, resumeDownloadingTasks } from './utils/taskManager';
@@ -134,18 +136,21 @@ const App: React.FC = () => {
     }, 30000); // 30秒检查一次
     
     // 监听token过期事件
-    const handleTokenExpired = () => {
-      console.log('Token已过期，清除登录状态');
+    const handleTokenExpired = (event: TokenExpiredEvent) => {
+      console.log('Token已过期，清除登录状态:', event.message);
       handleLogout();
+      setCurrentPage('auth');
     };
     
     // 设置token过期监听器
-    // tauriApi.onTokenExpired(handleTokenExpired);
+    const unlistenTokenExpired = listen<TokenExpiredEvent>('token-expired', (event) => {
+      handleTokenExpired(event.payload);
+    });
     
     // 清理监听器和定时器
     return () => {
       clearInterval(checkInterval);
-      // tauriApi.removeTokenExpiredListener();
+      unlistenTokenExpired.then(unlisten => unlisten());
     };
   }, []);
 
