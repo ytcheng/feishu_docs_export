@@ -1,6 +1,4 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- 主背景 -->
-  <rect width="1024" height="1024" rx="80" fill="#FFFFFF"/>
   
   <!-- 飞书网盘图标 - 放大充满画布 -->
   <g transform="translate(112, 112) scale(34)">
