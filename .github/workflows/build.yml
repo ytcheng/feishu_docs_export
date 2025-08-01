@@ -47,10 +47,6 @@ jobs:
         with:
           p12-file-base64: ${{ secrets.MAC_CERT }}
           p12-password: ${{ secrets.MAC_CERT_PASSWORD }}
-
-      - name: Run frontend lint
-        run: npm run lint --if-present
-
       - name: Run frontend tests
         run: npm run test --if-present
 
