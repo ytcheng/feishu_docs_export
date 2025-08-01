@@ -480,8 +480,8 @@ export class DatabaseManager {
     if (!this.db) throw new Error('Database not initialized');
 
     const result = await this.db.select<any[]>(
-      'SELECT * FROM download_files WHERE task_id = ? AND status = ? AND type in (?, ?) ORDER BY created_at ASC LIMIT ?',
-      [taskId, FileStatus.PENDING, 'FeishuWikiNode', 'FeishuFile', limit]
+      'SELECT * FROM download_files WHERE task_id = ? AND status IN(?, ?) AND type in (?, ?) ORDER BY created_at ASC LIMIT ?',
+      [taskId, FileStatus.PENDING, FileStatus.DOWNLOADING, 'FeishuWikiNode', 'FeishuFile', limit]
     );
 
     return result.map(row => ({
