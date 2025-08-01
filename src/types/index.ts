@@ -71,26 +71,26 @@ export interface UserInfo {
  */
 export type TaskStatus = 'pending' | 'downloading' | 'completed' | 'failed' | 'paused' | 'cancelled';
 
-/**
- * 下载任务接口
- */
-export interface DownloadTask {
-  id: string;
-  name: string;
-  description?: string;
-  status: TaskStatus;
-  progress: number;
-  totalFiles: number;
-  downloadedFiles: number;
-  failedFiles: number;
-  outputPath: string;
-  createdAt: string;
-  updatedAt: string;
-  sourceType: 'drive' | 'wiki';
-  sourceId?: string;
-  files?: DownloadFile[];
-  selectedNodes?: TreeNode[];
-}
+// /**
+//  * 下载任务接口
+//  */
+// export interface DownloadTask {
+//   id: string;
+//   name: string;
+//   description?: string;
+//   status: TaskStatus;
+//   progress: number;
+//   totalFiles: number;
+//   downloadedFiles: number;
+//   failedFiles: number;
+//   outputPath: string;
+//   createdAt: string;
+//   updatedAt: string;
+//   sourceType: 'drive' | 'wiki';
+//   sourceId?: string;
+//   files?: DownloadFile[];
+//   selectedNodes?: TreeNode[];
+// }
 export interface DownloadTaskRequest{
   name: string;
   description?: string;
@@ -101,18 +101,18 @@ export interface DownloadTaskRequest{
 /**
  * 下载文件接口
  */
-export interface DownloadFile {
-  token: string;
-  name: string;
-  type: string;
-  size?: number;
-  status: 'pending' | 'downloading' | 'completed' | 'failed';
-  progress: number;
-  localPath?: string;
-  error?: string;
-  relativePath?: string;
-  spaceId?: string;
-}
+// export interface DownloadFile {
+//   token: string;
+//   name: string;
+//   type: string;
+//   size?: number;
+//   status: 'pending' | 'downloading' | 'completed' | 'failed';
+//   progress: number;
+//   localPath?: string;
+//   error?: string;
+//   relativePath?: string;
+//   spaceId?: string;
+// }
 export interface FeishuFileShortcutInfo{
   target_type: string;
   target_token: string;

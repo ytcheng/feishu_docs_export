@@ -1,83 +1,14 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react';
 import { Card, Table, Progress, Space, Button, Tag, Popconfirm, Typography, Spin, Tooltip, App } from 'antd';
-import { DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, ArrowLeftOutlined, StopOutlined } from '@ant-design/icons';
-import { DownloadTask, DownloadFile } from '../types/database';
+import { DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, ArrowLeftOutlined, StopOutlined, UnorderedListOutlined } from '@ant-design/icons';
+import { DownloadTask } from '../types/database';
 import { openPath } from '@tauri-apps/plugin-opener'
 import { feishuApi } from '../utils/feishuApi';
 import * as taskManager from '../utils/taskManager';
-import { FeishuFile, FeishuWikiNode } from '../types';
+import FileListPage from './FileListPage';
 const { Text } = Typography;
 
-/**
- * 懒加载文件列表组件 - 内部管理状态避免外部干扰
- */
-const LazyFileList = React.memo<{
-  files: any[];
-  taskId: string;
-  fileColumns: any[];
-}>(({ files, taskId, fileColumns }) => {
-  const [displayCount, setDisplayCount] = useState(20);
-  const [isLoading, setIsLoading] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  
-  // 调试日志
-  console.log(`LazyFileList render - taskId: ${taskId}, displayCount: ${displayCount}, totalFiles: ${files.length}, isLoading: ${isLoading}`);
-  
-  // 当前显示的文件列表
-  const displayedFiles = useMemo(() => {
-    return files.slice(0, displayCount).map(file => ({ ...file, taskId }));
-  }, [files, displayCount, taskId]);
-  
-  /**
-   * 处理滚动事件，实现懒加载
-   */
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    const isNearBottom = scrollTop + clientHeight >= scrollHeight - 10;
-    
-    if (isNearBottom && displayCount < files.length && !isLoading) {
-      console.log(`Loading more files for task ${taskId}, current: ${displayCount}, total: ${files.length}`);
-      
-      setIsLoading(true);
-      
-      // 模拟加载延迟
-      setTimeout(() => {
-        const newCount = Math.min(displayCount + 20, files.length);
-        console.log(`Updated file count for task ${taskId}: ${newCount}`);
-        
-        setDisplayCount(newCount);
-        setIsLoading(false);
-      }, 100);
-    }
-  }, [taskId, displayCount, files.length, isLoading]);
-  
-  return (
-    <div 
-      ref={containerRef}
-      style={{ maxHeight: 300, overflow: 'auto' }}
-      onScroll={handleScroll}
-    >
-      <Table
-        columns={fileColumns}
-        dataSource={displayedFiles}
-        pagination={false}
-        size="small"
-        rowKey="token"
-        style={{ margin: 0 }}
-      />
-      {isLoading && (
-        <div style={{ textAlign: 'center', padding: '10px' }}>
-          <Spin size="small" /> 加载中...
-        </div>
-      )}
-      {displayCount < files.length && !isLoading && (
-        <div style={{ textAlign: 'center', padding: '10px', color: '#999' }}>
-          滑动到底部加载更多 ({displayCount}/{files.length})
-        </div>
-      )}
-    </div>
-  );
-});
+
 
 interface TaskListPageProps {
   onGoBack?: () => void;
@@ -90,9 +21,29 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   const { message } = App.useApp();
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const [loading, setLoading] = useState(false);
-  const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
   const taskScrollRef = useRef<HTMLDivElement>(null);
   const tasksRef = useRef<DownloadTask[]>([]);
+  
+  // 页面状态管理
+  const [currentPage, setCurrentPage] = useState<'taskList' | 'fileList'>('taskList');
+  const [selectedTask, setSelectedTask] = useState<{ id: number; name?: string } | null>(null);
+  
+  /**
+   * 跳转到文件列表页面
+   */
+  const handleGoToFileList = useCallback((taskId: number, taskName?: string) => {
+    setSelectedTask({ id: taskId, name: taskName });
+    setCurrentPage('fileList');
+  }, []);
+  
+  /**
+   * 从文件列表页面返回任务列表
+   */
+  const handleBackToTaskList = useCallback(() => {
+    setCurrentPage('taskList');
+    setSelectedTask(null);
+  }, []);
+
   /**
    * 加载下载任务列表（保持滚动位置）
    */
@@ -131,15 +82,20 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     try {
       const taskList = await taskManager.getDownloadTasks();
       console.log("updateTasksSilently", taskList);
-      setTasks(taskList);
-      tasksRef.current = taskList;
       
-      // 恢复滚动位置
-      setTimeout(() => {
-        if (taskScrollRef.current) {
-          taskScrollRef.current.scrollTop = currentScrollTop;
-        }
-      }, 10);
+      // 比较任务状态是否真正发生变化，避免不必要的重新渲染
+      const hasChanges = JSON.stringify(tasksRef.current) !== JSON.stringify(taskList);
+      if (hasChanges) {
+        setTasks(taskList);
+        tasksRef.current = taskList;
+        
+        // 恢复滚动位置
+        setTimeout(() => {
+          if (taskScrollRef.current) {
+            taskScrollRef.current.scrollTop = currentScrollTop;
+          }
+        }, 10);
+      }
     } catch (error) {
       console.error('静默更新任务列表失败:', error);
     }
@@ -220,6 +176,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
   // 防抖更新任务列表
   const debouncedUpdateTasks = useCallback(
     (() => {
+      console.log("debouncedUpdateTasks");
       let timeoutId: number;
       return () => {
         clearTimeout(timeoutId);
@@ -376,11 +333,12 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     
     // 设置定时器定期更新任务状态（仅在有下载任务时）
     const interval = setInterval(() => {
+      console.log("setInterval");
       // 只有在有正在下载的任务时才更新，避免不必要的滚动位置重置
       if (tasksRef.current.some(task => task.status === 'downloading')) {
         updateTasksSilently();
       }
-    }, 3000); // 每3秒更新一次
+    }, 10000); // 改为每10秒更新一次，减少频率
     
     return () => {
       clearInterval(interval);
@@ -395,12 +353,12 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     };
   }, [handleDownloadProgress, handleDownloadComplete, handleDownloadError, handleDownloadFileError, handleAutoResumeTask]);
 
-  // 任务表格列定义
-   const taskColumns = [
+  // 任务表格列定义 - 使用useMemo避免每次重新创建
+  const taskColumns = useMemo(() => [
      {
        title: '任务名称',
        key: 'name',
-       width: '18%',
+       width: '15%',
        render: (_: any, record: DownloadTask) => {
          const createTime = new Date(record.createdAt).toLocaleString('zh-CN', {
            year: 'numeric',
@@ -444,7 +402,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
        title: '进度',
        dataIndex: 'progress',
        key: 'progress',
-       width: '25%',
+       width: '20%',
        render: (progress: number) => (
          <Progress percent={Math.round(progress)} size="small" />
        ),
@@ -470,9 +428,9 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
      {
         title: '操作',
         key: 'action',
-        width: '8%',
+        width: '14%',
        render: (_: any, record: DownloadTask) => (
-         <Space>
+         <Space wrap>
             {record.status === 'downloading' && (
               <Button
                 icon={<StopOutlined />}
@@ -480,9 +438,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
                 type="default"
                 onClick={() => record.id && handleStopDownload(record.id)}
                 title="停止下载"
-              >
-                停止
-              </Button>
+              ></Button>
             )}
             {record.status === 'paused' && (
               <Button
@@ -491,9 +447,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
                 type="primary"
                 onClick={() => record.id && handleStartDownload(record.id)}
                 title="恢复下载"
-              >
-                恢复
-              </Button>
+              ></Button>
             )}
             {(record.status === 'completed' || record.status === 'failed') && hasFailedFiles(record) && (
               <Button
@@ -502,10 +456,14 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
                 type="default"
                 onClick={() => record.id && handleRetryFailedFiles(record.id)}
                 title="重新下载失败的文件"
-              >
-                重试失败
-              </Button>
+              ></Button>
             )}
+           <Button
+             icon={<UnorderedListOutlined />}
+             size="small"
+             onClick={() => record.id && handleGoToFileList(record.id, new Date(record.createdAt).toLocaleString('zh-CN'))}
+             title="查看文件列表"
+           />
            <Button
              icon={<FolderOpenOutlined />}
              size="small"
@@ -528,98 +486,9 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
          </Space>
        ),
      },
-  ];
+  ], []);
 
-  // 文件详情表格列定义
-  const fileColumns = [
-    {
-      title: '文件名',
-      dataIndex: 'name',
-      key: 'name',
-      width: '30%',
-    },
-    {
-      title: '类型',
-      dataIndex: 'type',
-      key: 'type',
-      width: '10%',
-      render: (type: string, record: DownloadFile) => {
-        const fileType = type === 'FeishuFile' ? (record.fileInfo as FeishuFile).type : (record.fileInfo as FeishuWikiNode).obj_type;
-        // console.log("fileType", fileType, "type", type, "fileInfo", record.fileInfo);
-        const typeMap: { [key: string]: string } = {
-          'file': '文件',
-          'doc': '文档',
-          'docx': '文档',
-          'sheet': '表格',
-          'bitable': '多维表格',
-          'folder': '文件夹'
-        };
-        return typeMap[fileType] || fileType;
-      },
-    },
-    {
-      title: '相对路径',
-      dataIndex: 'path',
-      key: 'path',
-      width: '25%',
-      render: (path: string) => (
-        <Text ellipsis={{ tooltip: path }} style={{ maxWidth: 200 }}>
-          {path}
-        </Text>
-      ),
-    },
-    {
-       title: '状态',
-       dataIndex: 'status',
-       key: 'status',
-       width: '15%',
-       render: (status: string, record: DownloadFile) => {
-         const fileStatusConfig = {
-           pending: { color: 'orange', text: '等待中' },
-           downloading: { color: 'blue', text: '下载中' },
-           completed: { color: 'green', text: '已完成' },
-           failed: { color: 'red', text: '失败' },
-         };
-         const config = fileStatusConfig[status as keyof typeof fileStatusConfig] || { color: 'default', text: status };
-         const statusTag = (
-           <Tag color={config.color}>
-             {config.text}
-           </Tag>
-         );
-         
-         // 如果状态是失败且有错误信息，显示鼠标悬停提示
-         if (status === 'failed' && record.error) {
-           return (
-             <Tooltip title={record.error} placement="top">
-               {statusTag}
-             </Tooltip>
-           );
-         }
-         
-         return statusTag;
-       },
-     },
-     {
-       title: '操作',
-       key: 'action',
-       width: '20%',
-       render: (_: any, record: DownloadFile & { taskId: number }) => (
-         <Space>
-           {record.status === 'failed' && (
-             <Button
-               icon={<ReloadOutlined />}
-               size="small"
-               type="primary"
-               onClick={() => handleRetryFile(record.taskId, (record.fileInfo as any).token)}
-               title="重试下载"
-             >
-               重试
-             </Button>
-           )}
-         </Space>
-       ),
-     },
-  ];
+  
 
   /**
    * 检查任务是否有失败的文件
@@ -628,25 +497,6 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
     return task.files ? task.files.some(file => file.status === 'failed') : false;
   };
 
-  /**
-   * 重试下载单个文件
-   */
-  const handleRetryFile = async (taskId: number, fileToken: string) => {
-    try {
-      if (!(await feishuApi.checkToken())) {
-        message.error('请先登录飞书账号');
-        return;
-      }
-      
-      message.info('正在重试下载文件...');
-      await taskManager.retryDownloadFile(taskId.toString(), fileToken, '');
-      message.success('文件重试下载已开始');
-      loadTasks(); // 重新加载任务列表
-    } catch (error) {
-      console.error('重试下载文件失败:', error);
-      message.error('重试下载文件失败');
-    }
-  };
 
   /**
    * 重试下载任务中所有失败的文件
@@ -690,20 +540,7 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
 
 
   
-  /**
-   * 展开行渲染函数 - 使用懒加载优化性能
-   */
-  const expandedRowRender = (record: DownloadTask) => {
-    const files = (record.files || []).filter(file => file.type === 'FeishuWikiNode' || file.type === 'FeishuFile');
-    
-    return (
-      <LazyFileList 
-        files={files} 
-        taskId={record.id?.toString() || ''}
-        fileColumns={fileColumns}
-      />
-    );
-  };
+
 
   // 任务列表懒加载状态
   const [taskDisplayCount, setTaskDisplayCount] = useState(10);
@@ -745,12 +582,6 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
           columns={taskColumns}
           dataSource={displayedTasks}
           rowKey="id"
-          expandable={{
-             expandedRowRender,
-             expandedRowKeys,
-             onExpandedRowsChange: (keys) => setExpandedRowKeys(keys as string[]),
-             rowExpandable: (record) => Boolean(record.files && record.files.length > 0),
-           }}
           pagination={false}
           locale={{
             emptyText: '暂无下载任务',
@@ -769,6 +600,17 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
       </div>
     );
   };
+
+  // 根据当前页面状态渲染不同的组件
+  if (currentPage === 'fileList' && selectedTask) {
+    return (
+      <FileListPage
+        taskId={selectedTask.id}
+        taskName={selectedTask.name}
+        onGoBack={handleBackToTaskList}
+      />
+    );
+  }
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>

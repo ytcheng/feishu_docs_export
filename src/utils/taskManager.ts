@@ -15,6 +15,7 @@ import {
 } from '../types/database';
 import { emit } from '@tauri-apps/api/event';
 import { join } from '@tauri-apps/api/path';
+import { FilesDiscoveredEvent } from '../types/event';
 
 /**
  * API错误接口
@@ -44,6 +45,11 @@ class ActiveDownloadsManager {
     return this.activeDownloads.has(taskId);
   }
 
+  isAborted(taskId: number): boolean {
+    const controller = this.activeDownloads.get(taskId);
+    return controller?.signal.aborted || false;
+  }
+
   stopAll(): void {
     for (const [_taskId, controller] of this.activeDownloads) {
       controller.abort();
@@ -64,6 +70,12 @@ export async function discoverTaskFiles(taskId: number): Promise<void> {
     await databaseManager.updateTaskStatus(taskId, TaskStatus.DOWNLOADING);
     
     while (true) {
+      // 检查任务是否被取消
+      if (activeDownloadsManager.isAborted(taskId)) {
+        console.log(`发现任务 ${taskId} 已被取消，停止文件发现循环`);
+        return;
+      }
+      
       // 查找需要展开的文件夹（isLeaf=false且isExpanded=false）
       const unexpandedFolders = await databaseManager.getUnexpandedFolders(taskId);
       console.log("discoverTaskFiles unexpandedFolders", unexpandedFolders);
@@ -76,6 +88,12 @@ export async function discoverTaskFiles(taskId: number): Promise<void> {
       console.log(`发现 ${unexpandedFolders.length} 个未展开的文件夹`);
       
       for (const folder of unexpandedFolders) {
+        // 再次检查任务是否被取消
+        if (activeDownloadsManager.isAborted(taskId)) {
+          console.log(`发现任务 ${taskId} 已被取消，停止文件夹展开`);
+          return;
+        }
+        
         try {
           const childFiles = await getChildFiles(folder);
           
@@ -98,6 +116,12 @@ export async function discoverTaskFiles(taskId: number): Promise<void> {
             if (newFiles.length > 0) {
               await databaseManager.createFiles(taskId, newFiles);
               console.log(`为文件夹 ${folder.name} 添加了 ${newFiles.length} 个子文件`);
+              
+              // 发送文件发现事件
+              await emit('files-discovered', {
+                task_id: taskId,
+                new_files: newFiles
+              } as FilesDiscoveredEvent);
               
               // 更新任务统计数据
               await updateTaskStatistics(taskId);
@@ -364,6 +388,20 @@ export async function getTaskFiles(taskId: string): Promise<DownloadFile[]> {
 }
 
 /**
+ * 获取任务的文件列表（按数字ID）
+ */
+export async function getTaskFilesByNumericId(taskId: number): Promise<DownloadFile[]> {
+  try {
+    return await databaseManager.getTaskFiles(taskId);
+  } catch (error) {
+    throw {
+      code: -1,
+      msg: `获取任务文件列表失败: ${error instanceof Error ? error.message : String(error)}`
+    } as ApiError;
+  }
+}
+
+/**
  * 更新下载任务
  */
 export async function updateDownloadTask(
@@ -490,11 +528,27 @@ export async function startDownloadTask(taskId: number): Promise<void> {
       } as ApiError;
     }
     
-    // 启动文件发现和下载的并行处理
-    await Promise.all([
-      discoverTaskFiles(taskId), // 文件发现循环
-      downloadTaskFiles(taskId)  // 文件下载循环
-    ]);
+    // 创建AbortController用于取消任务
+    const abortController = new AbortController();
+    activeDownloadsManager.add(taskId, abortController);
+    
+    try {
+      // 启动文件发现和下载的并行处理
+      await Promise.all([
+        discoverTaskFiles(taskId), // 文件发现循环
+        downloadTaskFiles(taskId)  // 文件下载循环
+      ]);
+    } catch (error) {
+      // 如果是取消操作，不抛出错误
+      if (abortController.signal.aborted) {
+        console.log(`任务 ${taskId} 已被取消`);
+        return;
+      }
+      throw error;
+    } finally {
+      // 清理AbortController
+      activeDownloadsManager.remove(taskId);
+    }
   } catch (error) {
     throw {
       code: -1,
@@ -511,6 +565,12 @@ async function downloadTaskFiles(taskId: number): Promise<void> {
   const WAIT_TIME = 1000; // 等待时间（毫秒）
 
   while (true) {
+    // 检查任务是否被取消
+     if (activeDownloadsManager.isAborted(taskId)) {
+       console.log(`下载任务 ${taskId} 已被取消，停止文件下载循环`);
+       return;
+     }
+    
     // 获取一批待下载的文件
     const pendingFiles = await databaseManager.getPendingFiles(taskId, BATCH_SIZE);
     console.log("downloadTaskFiles pendingFiles.length", pendingFiles.length);
@@ -548,6 +608,14 @@ async function downloadFileBatch(taskId: number, files: DownloadFile[]): Promise
         file.id!,
          FileStatus.DOWNLOADING
        );
+       
+      // 发送文件状态变化事件
+      await emit('file-status-changed', {
+        task_id: taskId,
+        file_id: file.id!,
+        file_name: file.name,
+        status: FileStatus.DOWNLOADING
+      });
 
       // 执行文件下载
       const success = await downloadFile(file, task.outputPath);
@@ -558,6 +626,14 @@ async function downloadFileBatch(taskId: number, files: DownloadFile[]): Promise
            file.id!,
            FileStatus.COMPLETED
          );
+         
+        // 发送文件状态变化事件
+        await emit('file-status-changed', {
+          task_id: taskId,
+          file_id: file.id!,
+          file_name: file.name,
+          status: FileStatus.COMPLETED
+        });
       } else {
         // 更新文件状态为失败
         await databaseManager.updateFileStatus(
@@ -565,6 +641,15 @@ async function downloadFileBatch(taskId: number, files: DownloadFile[]): Promise
            FileStatus.FAILED,
            'Download failed'
          );
+         
+        // 发送文件状态变化事件
+        await emit('file-status-changed', {
+          task_id: taskId,
+          file_id: file.id!,
+          file_name: file.name,
+          status: FileStatus.FAILED,
+          error: 'Download failed'
+        });
       }
 
       // 发送进度更新事件
@@ -572,11 +657,21 @@ async function downloadFileBatch(taskId: number, files: DownloadFile[]): Promise
 
     } catch (error) {
       console.error(`Error downloading file ${file.name}:`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       await databaseManager.updateFileStatus(
          file.id!,
          FileStatus.FAILED,
-         error instanceof Error ? error.message : 'Unknown error'
+         errorMessage
        );
+       
+      // 发送文件状态变化事件
+      await emit('file-status-changed', {
+        task_id: taskId,
+        file_id: file.id!,
+        file_name: file.name,
+        status: FileStatus.FAILED,
+        error: errorMessage
+      });
     }
   }
 }
