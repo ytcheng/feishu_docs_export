@@ -54,6 +54,10 @@ jobs:
       - name: Install frontend dependencies
         # If you don't have `beforeBuildCommand` configured you may want to build your frontend here too.
         run: npm install # change this to npm, yarn or pnpm.
+      # ✅ 在签名前验证是否成功导入证书
+      - name: Check available identities
+        if: matrix.platform == 'macos-latest'
+        run: security find-identity -v -p codesigning
 
       - name: Import Code-Signing Certificates (macOS only)
         if: matrix.platform == 'macos-latest'
