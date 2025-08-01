@@ -67,7 +67,9 @@ jobs:
           p12-file-base64: ${{ secrets.MAC_CERT }}
           # The password used to import the PKCS12 file.
           p12-password: ${{ secrets.MAC_CERT_PASSWORD }}
-
+      - name: Debug: List identities
+        if: matrix.platform == 'macos-latest'
+        run: security find-identity -v -p codesigning
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
