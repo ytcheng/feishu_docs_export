@@ -55,10 +55,22 @@ jobs:
         # If you don't have `beforeBuildCommand` configured you may want to build your frontend here too.
         run: npm install # change this to npm, yarn or pnpm.
 
+      - name: Import Code-Signing Certificates (macOS only)
+        if: matrix.platform == 'macos-latest'
+        uses: Apple-Actions/import-codesign-certs@v1
+        with:
+          # The certificates in a PKCS12 file encoded as a base64 string
+          p12-file-base64: ${{ secrets.MAC_CERT }}
+          # The password used to import the PKCS12 file.
+          p12-password: ${{ secrets.MAC_CERT_PASSWORD }}
+
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ENABLE_CODE_SIGNING: ${{ secrets.MAC_CERT }}
+          APPLE_CERTIFICATE: ${{ secrets.MAC_CERT }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }} # This only works if your workflow triggers on new tags.
           releaseName: 'Feishu Export v__VERSION__' # tauri-action replaces \_\_VERSION\_\_ with the app version.
