@@ -8,6 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { UserInfo } from './types';
 import './App.css';
 import { feishuApi } from './utils/feishuApi';
+import { resumeDownloadingTasks } from './utils/taskManager';
 
 const { Header, Content } = Layout;
 const { Text } = Typography;
@@ -38,13 +39,13 @@ const App: React.FC = () => {
     
     console.log('应用已切换到主界面，token已保存到状态中');
     
-    // 恢复pending状态的下载任务
-    //  try {
-    //    await tauriApi.resumeDownloadingTasks();
-    //    console.log('恢复pending下载任务完成');
-    //  } catch (error) {
-    //    console.error('恢复pending下载任务失败:', error);
-    //  }
+    // 恢复下载中状态的任务
+    try {
+      const result = await resumeDownloadingTasks();
+      console.log('登录后恢复下载任务完成:', result);
+    } catch (error) {
+      console.error('登录后恢复下载任务失败:', error);
+    }
    };
 
   /**
@@ -79,17 +80,31 @@ const App: React.FC = () => {
         
         console.log('应用已切换到主界面，token已从localStorage加载');
         
-        // 恢复pending状态的下载任务
-        // try {
-        //   await tauriApi.resumeDownloadingTasks();
-        //   console.log('应用启动时恢复pending下载任务完成');
-        // } catch (error) {
-        //   console.error('应用启动时恢复pending下载任务失败:', error);
-        // }
+        // 恢复下载中状态的任务
+        try {
+          const result = await resumeDownloadingTasks();
+          console.log('应用启动时恢复下载任务完成:', result);
+        } catch (error) {
+          console.error('应用启动时恢复下载任务失败:', error);
+        }
       }
     };
     
     initializeApp();
+    
+    // 设置定期检查下载任务的定时器（每30秒检查一次）
+    const checkInterval = setInterval(async () => {
+      if (authed) {
+        try {
+          const result = await resumeDownloadingTasks();
+          if (result !== '没有需要恢复的任务' && result !== '所有任务都已在运行') {
+            console.log('定期检查恢复下载任务:', result);
+          }
+        } catch (error) {
+          console.error('定期检查恢复下载任务失败:', error);
+        }
+      }
+    }, 30000); // 30秒检查一次
     
     // 监听token过期事件
     const handleTokenExpired = () => {
@@ -100,8 +115,9 @@ const App: React.FC = () => {
     // 设置token过期监听器
     // tauriApi.onTokenExpired(handleTokenExpired);
     
-    // 清理监听器
+    // 清理监听器和定时器
     return () => {
+      clearInterval(checkInterval);
       // tauriApi.removeTokenExpiredListener();
     };
   }, []);

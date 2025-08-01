@@ -492,8 +492,7 @@ export async function executeDownloadTask(taskId: string): Promise<boolean> {
  */
 export async function retryDownloadFile(
   taskId: string,
-  fileToken: string,
-  accessToken: string
+  fileToken: string
 ): Promise<boolean> {
   console.log('重试下载文件:', fileToken, 'in task', taskId);
   return true;
@@ -514,7 +513,8 @@ export async function startDownloadTask(taskId: number): Promise<void> {
       } as ApiError;
     }
     
-    if (task.status === TaskStatus.DOWNLOADING) {
+    // 只有当任务状态为DOWNLOADING且已经在activeDownloadsManager中时才抛出错误
+    if (task.status === TaskStatus.DOWNLOADING && activeDownloadsManager.has(taskId)) {
       throw {
         code: -1,
         msg: '任务已在下载中'
