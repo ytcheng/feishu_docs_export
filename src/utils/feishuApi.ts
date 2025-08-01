@@ -131,16 +131,15 @@ export class FeishuApi {
           return config;
         }
       }
+      throw new Error('配置不完整');
     } catch (error) {
       console.error('加载飞书配置失败:', error);
+      return {
+        appId: '',
+        appSecret: '',
+        endpoint: ''
+      };
     }
-    
-    // 返回默认配置
-    return {
-      appId: 'cli_a1ad86f33c38500d',
-      appSecret: 'iNw9h4HWv10gsyk0ZbOejhJs7YwHVQo3',
-      endpoint: 'https://open.feishu.cn/open-apis'
-    };
   }
 
   /**
