@@ -7,8 +7,8 @@
   </g>
   
   <!-- 下载箭头 - 右下角角标，指向右下45度，放大2倍，向左上移动 -->
-  <circle cx="810" cy="810" r="140" fill="#FF6B6B" opacity="0.9"/>
-  <g transform="rotate(45 810 810)">
+  <circle cx="810" cy="810" r="180" fill="#FF6B6B" opacity="1"/>
+  <g transform="translate(810 810) scale(1.4) translate(-810 -810) rotate(45 810 810)">
     <path d="M760 810 L860 810 M860 810 L830 780 M860 810 L830 840" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
   </g>
   
