@@ -45,6 +45,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuth, onGoToSettings }) => {
   const authCallbackRef = useRef(onAuth);
   const port = useRef(0);
   const redirectUri = useRef('');
+  const isProcessingAuth = useRef(false); // 添加授权处理标记
   // 更新回调引用
   authCallbackRef.current = onAuth;
   
@@ -52,6 +53,14 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuth, onGoToSettings }) => {
    * 处理授权回调
    */
   const handleAuthCallback = async (code: string) => {
+    // 防止重复处理授权
+    if (isProcessingAuth.current) {
+      console.log('授权正在处理中，忽略重复调用');
+      return;
+    }
+    
+    isProcessingAuth.current = true;
+    
     try {
       console.log('收到授权码:', code);
       
@@ -76,7 +85,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuth, onGoToSettings }) => {
       authCallbackRef.current();
     } catch (error) {
       console.error('授权失败:', error);
-      message.error('授权失败，请重试');
+      message.error(`授权失败，请重试: ${error}`);
+      // 授权失败时重置标记，允许重试
+      isProcessingAuth.current = false;
     }
   };
 
@@ -120,6 +131,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuth, onGoToSettings }) => {
       if (port.current) {
         cancel(port.current);
       }
+      // 重置授权处理标记
+      isProcessingAuth.current = false;
     }
   }, []);
   
@@ -127,6 +140,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuth, onGoToSettings }) => {
    * 监听URL变化，检测授权回调
    */
   useEffect(() => {
+    let unlistenRef: (() => void) | null = null;
+    
     const checkAuthCallback = (url: string) => {
       console.log('收到url:', url);
       const urlObj = new URL(url);
@@ -138,11 +153,37 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuth, onGoToSettings }) => {
         handleAuthCallback(code);
         cancel(port.current);
         port.current = 0;
+        // 授权成功后立即清理监听器
+        if (unlistenRef) {
+          console.log('授权成功，取消监听url');
+          unlistenRef();
+          unlistenRef = null;
+        }
       }
     };
 
-
-    onUrl(checkAuthCallback);
+    // 设置URL监听器
+    const setupUrlListener = async () => {
+      try {
+        unlistenRef = await onUrl(checkAuthCallback);
+        console.log('URL监听器已设置');
+      } catch (error) {
+        console.error('设置URL监听器失败:', error);
+      }
+    };
+    
+    // 延迟设置监听器，确保端口已经启动
+    const timeoutId = setTimeout(setupUrlListener, 10);
+    
+    // 清理函数
+    return () => {
+      clearTimeout(timeoutId);
+      if (unlistenRef) {
+        console.log('组件卸载，取消监听url');
+        unlistenRef();
+        unlistenRef = null;
+      }
+    };
   }, []);
 
   /**
