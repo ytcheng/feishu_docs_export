@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Input, Button, Typography, Space, App, Divider } from 'antd';
-import { SettingOutlined, SaveOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import { Card, Form, Input, Button, Typography, Space, App, Divider, Collapse } from 'antd';
+import { SettingOutlined, SaveOutlined, ArrowLeftOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { FeishuConfig } from '../utils/feishuApi';
 
 const { Title, Paragraph } = Typography;
@@ -130,25 +130,74 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ onBack, onConfigSaved }) =>
           <Paragraph type="secondary">
             请配置您的飞书应用信息，这些信息将用于连接飞书API
           </Paragraph>
-          <div style={{ 
-            background: '#f6ffed', 
-            border: '1px solid #b7eb8f', 
-            borderRadius: '6px', 
-            padding: '12px', 
-            marginTop: '16px',
-            textAlign: 'left'
-          }}>
-            <Paragraph style={{ margin: 0, fontSize: '13px', color: '#52c41a' }}>
-              <strong>重要提醒：</strong>请确保在飞书应用设置中添加以下重定向URL：
-            </Paragraph>
-            <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: '#389e0d' }}>
-              <li><code>http://localhost:3000</code></li>
-              <li><code>http://localhost:3001</code></li>
-            </ul>
-            <Paragraph style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#389e0d' }}>
-              路径：飞书开放平台 → 应用管理 → 您的应用 → 安全设置 → 重定向URL
-            </Paragraph>
-          </div>
+          
+          <Collapse 
+            size="small"
+            style={{ marginTop: '16px', textAlign: 'left' }}
+            items={[
+              {
+                key: 'setup-guide',
+                label: (
+                  <span style={{ color: '#1890ff', fontSize: '13px' }}>
+                    <InfoCircleOutlined style={{ marginRight: '6px' }} />
+                    配置指南（点击查看详细说明）
+                  </span>
+                ),
+                children: (
+                  <div>
+                    <div style={{ 
+                      background: '#f6ffed', 
+                      border: '1px solid #b7eb8f', 
+                      borderRadius: '6px', 
+                      padding: '12px', 
+                      marginBottom: '12px'
+                    }}>
+                      <Paragraph style={{ margin: 0, fontSize: '13px', color: '#52c41a' }}>
+                        <strong>重定向URL配置：</strong>请确保在飞书应用设置中添加以下重定向URL：
+                      </Paragraph>
+                      <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: '#389e0d' }}>
+                        <li><code>http://localhost:3000</code></li>
+                        <li><code>http://localhost:3001</code></li>
+                      </ul>
+                      <Paragraph style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#389e0d' }}>
+                        路径：飞书开放平台 → 应用管理 → 您的应用 → 安全设置 → 重定向URL
+                      </Paragraph>
+                    </div>
+                    
+                    <div style={{ 
+                       background: '#fff7e6', 
+                       border: '1px solid #ffd591', 
+                       borderRadius: '6px', 
+                       padding: '12px'
+                     }}>
+                       <Paragraph style={{ margin: 0, fontSize: '13px', color: '#d48806' }}>
+                         <strong>权限配置：</strong>请确保为应用开通以下权限范围（Scope）：
+                       </Paragraph>
+                       <div style={{ margin: '8px 0', padding: '8px', background: '#fef9e7', borderRadius: '4px', fontSize: '11px', fontFamily: 'monospace', color: '#8b5a00' }}>
+                         docs:doc docs:document.media:download docs:document:export docx:document drive:drive drive:file drive:file:download offline_access
+                       </div>
+                       <Paragraph style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#d46b08' }}>
+                         <strong>具体权限说明：</strong>
+                       </Paragraph>
+                       <ul style={{ margin: '4px 0 0 0', paddingLeft: '20px', fontSize: '11px', color: '#d46b08' }}>
+                         <li><code>docs:doc</code> - 查看、评论、编辑和管理云文档</li>
+                         <li><code>docs:document.media:download</code> - 下载云文档中的媒体文件</li>
+                         <li><code>docs:document:export</code> - 导出云文档为指定格式</li>
+                         <li><code>docx:document</code> - 访问新版文档</li>
+                         <li><code>drive:drive</code> - 获取云空间信息</li>
+                         <li><code>drive:file</code> - 访问云空间文件</li>
+                         <li><code>drive:file:download</code> - 下载云空间文件</li>
+                         <li><code>offline_access</code> - 离线访问授权数据</li>
+                       </ul>
+                       <Paragraph style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#d46b08' }}>
+                         路径：飞书开放平台 → 应用管理 → 您的应用 → 权限管理 → 权限配置
+                       </Paragraph>
+                     </div>
+                  </div>
+                )
+              }
+            ]}
+          />
         </div>
 
         <Form
