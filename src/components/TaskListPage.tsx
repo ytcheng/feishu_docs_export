@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react';
-import { Card, Table, Progress, Space, Button, Tag, Popconfirm, Typography, Spin, Tooltip, App } from 'antd';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Card, Table, Progress, Space, Button, Tag, Popconfirm, Typography, Spin, App } from 'antd';
 import { DeleteOutlined, FolderOpenOutlined, ReloadOutlined, PlayCircleOutlined, ArrowLeftOutlined, StopOutlined, UnorderedListOutlined } from '@ant-design/icons';
-import { DownloadTask } from '../types/database';
+import { DownloadTask, TaskStatus } from '../types/database';
 import { openPath } from '@tauri-apps/plugin-opener'
 import { feishuApi } from '../utils/feishuApi';
 import * as taskManager from '../utils/taskManager';
@@ -139,19 +139,24 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         return;
       }
       
-      // 找到对应的任务
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) {
-        message.error('任务不存在');
-        return;
-      }
       
       // 使用taskManager执行下载任务
       message.info('任务开始下载，请稍候...');
-      await taskManager.executeDownloadTask(taskId.toString());
+      taskManager.executeDownloadTask(taskId);
       message.success('任务开始下载');
-      
-      loadTasks(); // 重新加载任务列表
+
+      const tasklist = tasksRef.current.map((item) => {
+        if (item.id === taskId) {
+          return {
+            ...item,
+            status: TaskStatus.DOWNLOADING,
+          }
+        }
+        return item;
+      });
+      setTasks(tasklist);
+      tasksRef.current = tasklist;
+      // loadTasks(); // 重新加载任务列表
     } catch (error) {
       console.error('开始下载失败:', error);
       message.error('开始下载失败');

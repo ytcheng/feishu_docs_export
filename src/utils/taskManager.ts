@@ -47,7 +47,11 @@ class ActiveDownloadsManager {
 
   isAborted(taskId: number): boolean {
     const controller = this.activeDownloads.get(taskId);
-    console.log("ActiveDownloadsManager isAborted", controller)
+    if(!controller) {
+      console.log("ActiveDownloadsManager isAborted", true)
+      return true;
+    }
+    console.log("ActiveDownloadsManager isAborted", controller?.signal.aborted || false)
     return controller?.signal.aborted || false;
   }
 
@@ -67,9 +71,6 @@ const activeDownloadsManager = new ActiveDownloadsManager();
  */
 export async function discoverTaskFiles(taskId: number): Promise<void> {
   try {
-    // 设置任务状态为下载中
-    await databaseManager.updateTaskStatus(taskId, TaskStatus.DOWNLOADING);
-    
     while (true) {
       // 检查任务是否被取消
       if (activeDownloadsManager.isAborted(taskId)) {
@@ -463,11 +464,11 @@ export async function deleteDownloadTask(id: number): Promise<boolean> {
 /**
  * 执行下载任务
  */
-export async function executeDownloadTask(taskId: string): Promise<boolean> {
+export async function executeDownloadTask(taskId: number): Promise<boolean> {
   try {
     console.log('开始执行下载任务:', taskId);
     
-    const task = await databaseManager.getTask(parseInt(taskId));
+    const task = await databaseManager.getTask(taskId);
     if (!task) {
       throw {
         code: -1,
@@ -475,7 +476,7 @@ export async function executeDownloadTask(taskId: string): Promise<boolean> {
       } as ApiError;
     }
     
-    await startDownloadTask(parseInt(taskId));
+    await startDownloadTask(taskId);
     
     return true;
   } catch (error) {
@@ -510,7 +511,7 @@ export async function startDownloadTask(taskId: number): Promise<void> {
     if (!task) {
       throw {
         code: -1,
-        msg: '任务不存在'
+        msg: '任务不存在2'
       } as ApiError;
     }
     
@@ -528,6 +529,9 @@ export async function startDownloadTask(taskId: number): Promise<void> {
         msg: '任务已完成'
       } as ApiError;
     }
+
+    // 更新任务状态为下载中
+    await databaseManager.updateTaskStatus(taskId, TaskStatus.DOWNLOADING);
     
     // 创建AbortController用于取消任务
     const abortController = new AbortController();
@@ -604,6 +608,10 @@ async function downloadFileBatch(taskId: number, files: DownloadFile[]): Promise
 
   for (const file of files) {
     try {
+      if (activeDownloadsManager.isAborted(taskId)) {
+        console.log(`下载任务 ${taskId} 已被取消，停止文件下载循环`);
+        return;
+      }
       // 更新文件状态为下载中
       await databaseManager.updateFileStatus(
         file.id!,

@@ -1,31 +1,3 @@
-// Copyright 2019-2023 Tauri Programme within The Commons Conservancy
-// SPDX-License-Identifier: Apache-2.0
-// SPDX-License-Identifier: MIT
-
-/**
- * Make HTTP requests with the Rust backend.
- *
- * ## Security
- *
- * This API has a scope configuration that forces you to restrict the URLs that can be accessed using glob patterns.
- *
- * For instance, this scope configuration only allows making HTTP requests to all subdomains for `tauri.app` except for `https://private.tauri.app`:
- * ```json
- * {
- *   "permissions": [
- *     {
- *       "identifier": "http:default",
- *       "allow": [{ "url": "https://*.tauri.app" }],
- *       "deny": [{ "url": "https://private.tauri.app" }]
- *     }
- *   ]
- * }
- * ```
- * Trying to execute any API with a URL not configured on the scope results in a promise rejection due to denied access.
- *
- * @module
- */
-
 import { Channel, invoke } from '@tauri-apps/api/core'
 import  { AxiosAdapter } from 'axios';
 /**
