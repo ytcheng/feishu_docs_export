@@ -11,7 +11,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:feishu_export.db", vec![
+                .add_migrations("sqlite:feishu_docs_export.db", vec![
                     // Migration v1: 创建基础表
                     tauri_plugin_sql::Migration {
                         version: 1,

@@ -82,12 +82,15 @@
 
 ### 方式一：下载预编译版本（推荐）
 
-1. 访问 [Releases 页面](https://github.com/your-username/feishu_export_tauri/releases)
+1. 访问 [Releases 页面](https://github.com/ytcheng/feishu_docs_export/releases)
 2. 下载适合您操作系统的安装包：
-   - Windows: `feishu_export_x.x.x_x64_en-US.msi`
-   - macOS: `feishu_export_x.x.x_x64.dmg`
-   - Linux: `feishu_export_x.x.x_amd64.deb` 或 `feishu_export_x.x.x_amd64.AppImage`
+   - **Windows**: `feishu_docs_export_x.x.x_x64_en-US.msi`
+   - **macOS (Intel)**: `feishu_docs_export_x.x.x_x64.dmg`
+   - **macOS (Apple Silicon)**: `feishu_docs_export_x.x.x_aarch64.dmg`
+   - **Linux**: `feishu_docs_export_x.x.x_amd64.deb` 或 `feishu_docs_export_x.x.x_amd64.AppImage`
 3. 运行安装包并按照提示完成安装
+
+> 💡 **自动构建**: 所有发布版本都通过 GitHub Actions 自动构建，确保代码质量和安全性
 
 ### 方式二：从源码构建
 
@@ -104,8 +107,8 @@ cargo install tauri-cli
 #### 构建步骤
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/feishu_export_tauri.git
-cd feishu_export_tauri
+git clone https://github.com/ytcheng/feishu_docs_export.git
+cd feishu_docs_export
 
 # 安装依赖
 npm install
@@ -189,9 +192,29 @@ http://localhost:3001/callback
 
 ## 🔧 开发指南
 
+### CI/CD 自动化
+
+本项目使用 GitHub Actions 实现自动化构建和发布：
+
+#### 🚀 自动发布流程
+- **触发条件**: 推送 `v*` 格式的 Git 标签（如 `v1.0.0`）
+- **构建平台**: 自动构建 Windows、macOS (Intel + Apple Silicon)、Linux 版本
+- **发布方式**: 自动创建 GitHub Release 并上传安装包
+
+```bash
+# 创建发布版本
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+#### 🧪 持续集成
+- **触发条件**: 推送到 `main` 或 `develop` 分支，以及 Pull Request
+- **检查项目**: 代码 lint、单元测试、跨平台构建测试
+- **支持平台**: Windows、macOS、Linux
+
 ### 项目结构
 ```
-feishu_export_tauri/
+feishu_docs_export/
 ├── src/                    # React 前端源码
 │   ├── components/         # React 组件
 │   │   ├── AuthPage.tsx   # 授权页面
@@ -233,7 +256,7 @@ npm run preview
 ### 调试技巧
 - 开发模式下按 `F12` 打开开发者工具
 - 查看 Rust 后端日志：`cargo tauri dev -- --verbose`
-- 数据库文件位置：`src-tauri/.data/feishu_export.db`
+- 数据库文件位置：`src-tauri/.data/feishu_docs_export.db`
 
 ## 🤝 贡献指南
 
@@ -273,7 +296,7 @@ npm run preview
 
 如果您在使用过程中遇到问题，可以通过以下方式获取帮助：
 
-- 📋 [提交 Issue](https://github.com/your-username/feishu_export_tauri/issues)
+- 📋 [提交 Issue](https://github.com/ytcheng/feishu_docs_export/issues)
 - 📧 发送邮件至：your-email@example.com
 - 💬 加入讨论群：[链接]
 

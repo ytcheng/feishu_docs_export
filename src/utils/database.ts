@@ -15,7 +15,7 @@ export class DatabaseManager {
   private db: Database | null = null;
   private dbPath: string;
 
-  constructor(dbPath: string = 'sqlite:feishu_export.db') {
+  constructor(dbPath: string = 'sqlite:feishu_docs_export.db') {
     this.dbPath = dbPath;
   }
 

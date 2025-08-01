@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "feishu_export",
+  "productName": "feishu_docs_export",
   "version": "0.1.0",
   "identifier": "com.feishu-export",
   "build": {
@@ -36,7 +36,7 @@
   },
   "plugins": {
     "sql": {
-      "preload": ["sqlite:feishu_export.db"]
+      "preload": ["sqlite:feishu_docs_export.db"]
     }
   },
 

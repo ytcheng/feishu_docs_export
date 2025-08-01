@@ -1,0 +1,59 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Sync node version and setup cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Run frontend lint
+        run: npm run lint --if-present
+
+      - name: Run frontend tests
+        run: npm run test --if-present
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run Rust tests
+        run: |
+          cd src-tauri
+          cargo test
+
+      - name: Build Tauri app (without bundling)
+        run: npm run tauri build -- --no-bundle

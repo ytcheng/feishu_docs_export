@@ -23,4 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 feishu-export
-src-tauri/.data/feishu_export.db
+src-tauri/.data/feishu_docs_export.db
+.vscode
+.trae
+.vercel
