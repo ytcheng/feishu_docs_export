@@ -57,6 +57,7 @@ const App: React.FC = () => {
    */
   const handleLogout = () => {
     localStorage.removeItem('feishu_user_info');
+    localStorage.removeItem('feishu_token');
     setUserInfo(null);
     setAuthed(false);
     activeDownloadsManager.stopAll();
