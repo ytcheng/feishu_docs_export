@@ -166,7 +166,7 @@ const App: React.FC = () => {
       unlistenTokenExpired.then(unlisten => unlisten());
       unlistenAuthSuccess.then(unlisten => unlisten());
     };
-  }, []);
+  }, [authed]);
 
   // 根据当前页面状态渲染不同组件
   if (currentPage === 'settings') {
