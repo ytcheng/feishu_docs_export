@@ -214,30 +214,40 @@ const App: React.FC = () => {
     <ConfigProvider>
       <AntdApp>
         <Layout style={{ height: '100vh' }}>
-          <Header style={{ 
+          <Header data-tauri-drag-region style={{ 
             background: '#fff', 
             borderBottom: '1px solid #eee', 
             padding: '0 24px',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
+            justifyContent: 'center',
+            alignItems: 'center',
+            position: 'relative'
           }}>
-            <div style={{ fontWeight: 'bold', fontSize: 18 }}>飞书文档导出助手</div>
+            <div style={{ fontWeight: 'bold', fontSize: 16, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <img 
+                src="/app-icon.svg" 
+                alt="飞书文档导出助手" 
+                style={{ width: 24, height: 24 }}
+              />
+              飞书文档导出助手
+            </div>
             {userInfo && (
-              <Dropdown
-                menu={{ items: userMenuItems }}
-                placement="bottomRight"
-                trigger={['hover']}
-              >
-                <Space style={{ cursor: 'pointer' }}>
-                  <Avatar 
-                    src={userInfo.avatar_thumb || userInfo.avatar_url} 
-                    icon={<UserOutlined />}
-                    size={32}
-                  />
-                  <Text>{userInfo.name}</Text>
-                </Space>
-              </Dropdown>
+              <div style={{ position: 'absolute', right: '24px' }}>
+                <Dropdown
+                  menu={{ items: userMenuItems }}
+                  placement="bottomRight"
+                  trigger={['hover']}
+                >
+                  <Space style={{ cursor: 'pointer' }}>
+                    <Avatar 
+                      src={userInfo.avatar_thumb || userInfo.avatar_url} 
+                      icon={<UserOutlined />}
+                      size={32}
+                    />
+                    <Text>{userInfo.name}</Text>
+                  </Space>
+                </Dropdown>
+              </div>
             )}
           </Header>
           <Content style={{ padding: '24px', minHeight: 'calc(100vh - 64px)' }}>
