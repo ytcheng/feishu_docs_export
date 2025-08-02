@@ -9,3 +9,7 @@ export interface TokenExpiredEvent {
   message: string;
   timestamp: number;
 }
+
+export interface AuthSuccessEvent {
+  message: string;
+}

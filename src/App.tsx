@@ -8,7 +8,7 @@ import TaskListPage from './components/TaskListPage';
 import SettingsPage from './components/SettingsPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { UserInfo } from './types';
-import { TokenExpiredEvent } from './types/event';
+import { TokenExpiredEvent, AuthSuccessEvent } from './types/event';
 import './App.css';
 import { feishuApi, FeishuApi, FeishuConfig } from './utils/feishuApi';
 import { activeDownloadsManager, resumeDownloadingTasks } from './utils/taskManager';
@@ -142,15 +142,28 @@ const App: React.FC = () => {
       setCurrentPage('auth');
     };
     
+    // 监听授权成功事件
+    const handleAuthSuccess = () => {
+      console.log('收到授权成功事件');
+      handleAuth();
+    };
+    
     // 设置token过期监听器
     const unlistenTokenExpired = listen<TokenExpiredEvent>('token-expired', (event) => {
       handleTokenExpired(event.payload);
+    });
+    
+    // 设置授权成功监听器
+    const unlistenAuthSuccess = listen<AuthSuccessEvent>('auth-success', (event) => {
+      console.log('收到授权成功事件:', event.payload.message);
+      handleAuthSuccess();
     });
     
     // 清理监听器和定时器
     return () => {
       clearInterval(checkInterval);
       unlistenTokenExpired.then(unlisten => unlisten());
+      unlistenAuthSuccess.then(unlisten => unlisten());
     };
   }, []);
 
@@ -176,7 +189,6 @@ const App: React.FC = () => {
         <AntdApp>
           <ErrorBoundary>
             <AuthPage 
-              onAuth={handleAuth} 
               onGoToSettings={() => setCurrentPage('settings')}
             />
           </ErrorBoundary>

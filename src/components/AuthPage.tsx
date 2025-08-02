@@ -3,6 +3,7 @@ import { Card, Typography, App } from 'antd';
 import { feishuApi } from '../utils/feishuApi';
 import { openUrl} from '@tauri-apps/plugin-opener'
 import { start, cancel, onUrl } from '@fabianlars/tauri-plugin-oauth';
+import { emit } from '@tauri-apps/api/event';
 
 
 
@@ -28,7 +29,6 @@ interface AuthData {
  * 飞书授权页面组件属性
  */
 interface AuthPageProps {
-  onAuth: () => void;
   onGoToSettings?: () => void;
 }
 
@@ -36,18 +36,15 @@ interface AuthPageProps {
  * 飞书授权页面组件
  * 适配Tauri版本
  */
-const AuthPage: React.FC<AuthPageProps> = ({ onAuth, onGoToSettings }) => {
+const AuthPage: React.FC<AuthPageProps> = ({ onGoToSettings }) => {
   const { message } = App.useApp();
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const qrContainerRef = useRef<HTMLDivElement>(null);
   const messageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
   const qrInitializedRef = useRef<boolean>(false);
-  const authCallbackRef = useRef(onAuth);
   const port = useRef(0);
   const redirectUri = useRef('');
   const isProcessingAuth = useRef(false); // 添加授权处理标记
-  // 更新回调引用
-  authCallbackRef.current = onAuth;
   
   /**
    * 处理授权回调
@@ -81,8 +78,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onAuth, onGoToSettings }) => {
       console.log('授权成功，已保存认证数据到localStorage');
       message.success('授权成功！');
       
-      // 授权成功，展示主界面
-      authCallbackRef.current();
+      // 发送授权成功事件
+      await emit('auth-success', { message: '授权成功' });
     } catch (error) {
       console.error('授权失败:', error);
       message.error(`授权失败，请重试: ${error}`);
