@@ -141,6 +141,10 @@ npm run tauri build
 - `drive:file` - 查看云盘文件
 - `drive:file:download` - 下载云盘文件
 - `offline_access` - 获取 refresh token
+- `bitable:app` - 查看、评论、编辑和管理多维表格
+- `wiki:wiki` - 查看、编辑和管理知识库
+- `sheets:spreadsheet` - 查看、评论、编辑和管理电子表格
+- 
 
 #### 设置重定向 URL
 在应用的「安全设置」中添加重定向 URL：
