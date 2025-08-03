@@ -12,7 +12,6 @@ import { TokenExpiredEvent, AuthSuccessEvent } from './types/event';
 import './App.css';
 import { feishuApi, FeishuApi, FeishuConfig } from './utils/feishuApi';
 import { activeDownloadsManager, resumeDownloadingTasks } from './utils/taskManager';
-import logo from '@/assets/app-icon.svg';
 
 
 const { Header, Content } = Layout;
@@ -225,14 +224,6 @@ const App: React.FC = () => {
             alignItems: 'center',
             position: 'relative'
           }}>
-            <div style={{ fontWeight: 'bold', fontSize: 16, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <img 
-                src={logo} 
-                alt="飞书文档导出助手" 
-                style={{ width: 24, height: 24 }}
-              />
-              飞书文档导出助手
-            </div>
             {userInfo && (
               <div style={{ position: 'absolute', right: '24px' }}>
                 <Dropdown
