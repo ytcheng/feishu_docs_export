@@ -491,13 +491,112 @@ export async function executeDownloadTask(taskId: number): Promise<boolean> {
 
 /**
  * 重试下载文件
+ * @param file 要重试下载的文件对象
+ * @returns 是否成功开始重试
  */
-export async function retryDownloadFile(
-  taskId: string,
-  fileToken: string
-): Promise<boolean> {
-  console.log('重试下载文件:', fileToken, 'in task', taskId);
-  return true;
+/**
+ * 重试下载文件
+ * @param file 要重试下载的文件对象
+ * @returns 是否成功
+ */
+export async function retryDownloadFile(file: DownloadFile): Promise<boolean> {
+  console.log('重试下载文件:', file.name, 'in task', file.taskId);
+  
+  // 获取任务信息
+  const task = await databaseManager.getTask(file.taskId!);
+  if (!task) {
+    console.error('任务不存在:', file.taskId);
+    return false;
+  }
+
+  // 检查文件状态，只重试失败的文件
+  if (file.status !== FileStatus.FAILED) {
+    console.log(`文件 ${file.name} 状态为 ${file.status}，无需重试`);
+    return true;
+  }
+
+  console.log(`开始重试下载文件: ${file.name}`);
+  
+  // 重置文件状态为下载中
+  await databaseManager.updateFileStatus(file.id!, FileStatus.DOWNLOADING);
+  await emit('file-status-changed', {
+    task_id: file.taskId!,
+    file_id: file.id!,
+    file_name: file.name,
+    status: FileStatus.DOWNLOADING
+  });
+
+  // 重新下载文件 - 这里是唯一可能抛出错误的地方
+  let success = false;
+  let errorMessage: string | undefined;
+  
+  try {
+    success = await downloadFile(file, task.outputPath);
+    if (!success) {
+      errorMessage = '重试下载失败';
+    }
+  } catch (error) {
+    console.error(`下载文件 ${file.name} 抛出异常:`, error);
+    success = false;
+    errorMessage = error instanceof Error ? error.message : '下载过程中发生异常';
+  }
+  
+  // 根据下载结果更新文件状态
+  const newStatus = success ? FileStatus.COMPLETED : FileStatus.FAILED;
+  
+  await databaseManager.updateFileStatus(file.id!, newStatus, errorMessage);
+  await emit('file-status-changed', {
+    task_id: file.taskId!,
+    file_id: file.id!,
+    file_name: file.name,
+    status: newStatus,
+    error: errorMessage
+  });
+  
+  console.log(`文件 ${file.name} 重试下载${success ? '成功' : '失败'}${errorMessage ? ': ' + errorMessage : ''}`);
+
+  // 更新任务进度
+  await updateTaskProgress(file.taskId!);
+  
+  return success;
+}
+
+/**
+ * 将任务中所有失败的文件状态重置为待下载
+ * @param taskId - 任务ID
+ * @returns Promise<void>
+ */
+export async function resetFailedFilesToPending(taskId: number): Promise<void> {
+  try {
+    console.log('重置任务失败文件状态为待下载:', taskId);
+    
+    // 获取任务中所有失败的文件
+    const files = await databaseManager.getTaskFiles(taskId);
+    const failedFiles = files.filter(file => file.status === FileStatus.FAILED);
+    
+    if (failedFiles.length === 0) {
+      console.log('没有失败的文件需要重置');
+      return;
+    }
+    
+    console.log(`找到 ${failedFiles.length} 个失败文件，正在重置状态...`);
+    
+    // 批量更新失败文件状态为待下载
+    for (const file of failedFiles) {
+      await databaseManager.updateFileStatus(file.id!, FileStatus.PENDING);
+      await emit('file-status-changed', {
+        task_id: taskId,
+        file_id: file.id!,
+        file_name: file.name,
+        status: FileStatus.PENDING
+      });
+    }
+    
+    console.log('失败文件状态重置完成');
+  } catch (error) {
+    console.error('重置失败文件状态失败:', error);
+    throw error;
+  }
 }
 
 /**
@@ -571,10 +670,10 @@ async function downloadTaskFiles(taskId: number): Promise<void> {
 
   while (true) {
     // 检查任务是否被取消
-     if (activeDownloadsManager.isAborted(taskId)) {
-       console.log(`下载任务 ${taskId} 已被取消，停止文件下载循环`);
-       return;
-     }
+    if (activeDownloadsManager.isAborted(taskId)) {
+      console.log(`下载任务 ${taskId} 已被取消，停止文件下载循环`);
+      return;
+    }
     
     // 获取一批待下载的文件
     const pendingFiles = await databaseManager.getPendingFiles(taskId, BATCH_SIZE);
@@ -615,8 +714,8 @@ async function downloadFileBatch(taskId: number, files: DownloadFile[]): Promise
       // 更新文件状态为下载中
       await databaseManager.updateFileStatus(
         file.id!,
-         FileStatus.DOWNLOADING
-       );
+        FileStatus.DOWNLOADING
+      );
        
       // 发送文件状态变化事件
       await emit('file-status-changed', {
@@ -631,9 +730,9 @@ async function downloadFileBatch(taskId: number, files: DownloadFile[]): Promise
 
       // 更新文件状态为已完成
       await databaseManager.updateFileStatus(
-         file.id!,
-         FileStatus.COMPLETED
-       );
+        file.id!,
+        FileStatus.COMPLETED
+      );
        
       // 发送文件状态变化事件
       await emit('file-status-changed', {
@@ -650,10 +749,10 @@ async function downloadFileBatch(taskId: number, files: DownloadFile[]): Promise
       console.error(`Error downloading file ${file.name}:`, error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       await databaseManager.updateFileStatus(
-         file.id!,
-         FileStatus.FAILED,
-         errorMessage
-       );
+        file.id!,
+        FileStatus.FAILED,
+        errorMessage
+      );
        
       // 发送文件状态变化事件
       await emit('file-status-changed', {
@@ -693,18 +792,18 @@ async function updateTaskStatistics(taskId: number): Promise<void> {
  */
 async function updateTaskProgress(taskId: number): Promise<void> {
   const completedCount = await databaseManager.getFileCountByStatus(taskId, FileStatus.COMPLETED);
-   const failedCount = await databaseManager.getFileCountByStatus(taskId, FileStatus.FAILED);
+  const failedCount = await databaseManager.getFileCountByStatus(taskId, FileStatus.FAILED);
   const totalFiles = await databaseManager.getTaskFiles(taskId).then(files => files.filter(f => f.type === 'FeishuWikiNode' || f.type === 'FeishuFile').length);
 
   const progress = totalFiles > 0 ? ((completedCount + failedCount) / totalFiles) * 100 : 0;
 
   await databaseManager.updateTaskProgress(
-     taskId,
-     progress,
-     completedCount,
-     failedCount,
-     totalFiles
-   );
+    taskId,
+    progress,
+    completedCount,
+    failedCount,
+    totalFiles
+  );
 
   // 发送进度更新事件
   await emit('download-progress', {
@@ -722,8 +821,8 @@ async function updateTaskProgress(taskId: number): Promise<void> {
  */
 async function finalizeTask(taskId: number): Promise<void> {
   const completedCount = await databaseManager.getFileCountByStatus(taskId, FileStatus.COMPLETED);
-   const failedCount = await databaseManager.getFileCountByStatus(taskId, FileStatus.FAILED);
-   const totalFiles = await databaseManager.getTaskFiles(taskId).then(files => files.length);
+  const failedCount = await databaseManager.getFileCountByStatus(taskId, FileStatus.FAILED);
+  const totalFiles = await databaseManager.getTaskFiles(taskId).then(files => files.length);
 
   // 确定最终状态
   const finalStatus = failedCount > 0 ? TaskStatus.FAILED : TaskStatus.COMPLETED;
@@ -736,7 +835,8 @@ async function finalizeTask(taskId: number): Promise<void> {
     completed_files: completedCount,
     total_files: totalFiles,
     current_file: '',
-    status: finalStatus
+    status: finalStatus,
+    error: '部分文件下载失败'
   });
 }
 

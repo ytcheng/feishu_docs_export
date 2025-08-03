@@ -103,10 +103,12 @@ const FileListPage: React.FC<FileListPageProps> = ({ taskId, taskName, onGoBack 
           status: data.status,
           error: data.error || undefined
         };
-        
         // 只有当变化的文件在当前显示范围内时才增加版本号
         if (fileIndex >= startIndexRef.current && fileIndex < endIndexRef.current) {
           incrementVersion();
+        }
+        if(data.status == 'failed'){
+          message.error(`文件"${data.file_name}"下载失败:${data.error}`);
         }
       }
     }
@@ -232,7 +234,7 @@ const FileListPage: React.FC<FileListPageProps> = ({ taskId, taskName, onGoBack 
   /**
    * 重试下载单个文件
    */
-  const handleRetryFile = useCallback(async (taskId: number, fileToken: string) => {
+  const handleRetryFile = useCallback(async (file: DownloadFile) => {
     try {
       if (!(await feishuApi.checkToken())) {
         message.error('请先登录飞书账号');
@@ -240,8 +242,7 @@ const FileListPage: React.FC<FileListPageProps> = ({ taskId, taskName, onGoBack 
       }
 
       message.info('正在重试下载文件...');
-      await taskManager.retryDownloadFile(taskId.toString(), fileToken);
-      message.success('文件重试下载已开始');
+      await taskManager.retryDownloadFile(file);
     } catch (error) {
       console.error('重试下载文件失败:', error);
       message.error('重试下载文件失败');
@@ -327,7 +328,7 @@ const FileListPage: React.FC<FileListPageProps> = ({ taskId, taskName, onGoBack 
               icon={<ReloadOutlined />}
               size="small"
               type="primary"
-              onClick={() => handleRetryFile(record.taskId, (record.fileInfo as any).token)}
+              onClick={() => handleRetryFile(record)}
               title="重试下载"
             >
               重试

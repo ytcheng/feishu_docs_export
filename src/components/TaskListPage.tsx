@@ -508,8 +508,14 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
    */
   const handleRetryFailedFiles = async (taskId: number) => {
     try {
+      if (!(await feishuApi.checkToken())) {
+        message.error('请先登录飞书账号');
+        return;
+      }
+
       // 找到对应的任务
-      const task = tasks.find(t => t.id === taskId);
+      console.log("handleRetryFailedFiles taskId", taskId, "tasks", tasksRef.current);
+      const task = tasksRef.current.find(t => t.id === taskId);
       if (!task) {
         message.error('任务不存在');
         return;
@@ -522,18 +528,16 @@ const TaskListPage: React.FC<TaskListPageProps> = ({ onGoBack }) => {
         return;
       }
       
-      message.info(`正在重试 ${failedFiles.length} 个失败的文件...`);
+      message.info(`正在重置 ${failedFiles.length} 个失败文件状态并重新启动任务...`);
       
-      // 逐个重试失败的文件
-      for (const file of failedFiles) {
-        try {
-          await taskManager.retryDownloadFile(taskId.toString(), (file.fileInfo as any).token);
-        } catch (error) {
-          console.error(`重试文件 ${file.name} 失败:`, error);
-        }
-      }
+      // 将所有失败文件状态重置为待下载
+      await taskManager.resetFailedFilesToPending(taskId);
+
+      message.success('失败文件已重置，任务重新启动');
       
-      message.success('失败文件重试下载已开始');
+      // 重新启动下载任务
+      await taskManager.executeDownloadTask(taskId);
+      
       loadTasks(); // 重新加载任务列表
     } catch (error) {
       console.error('重试失败文件失败:', error);
