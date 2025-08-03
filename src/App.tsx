@@ -12,6 +12,8 @@ import { TokenExpiredEvent, AuthSuccessEvent } from './types/event';
 import './App.css';
 import { feishuApi, FeishuApi, FeishuConfig } from './utils/feishuApi';
 import { activeDownloadsManager, resumeDownloadingTasks } from './utils/taskManager';
+import logo from '@/assets/app-icon.svg';
+
 
 const { Header, Content } = Layout;
 const { Text } = Typography;
@@ -225,7 +227,7 @@ const App: React.FC = () => {
           }}>
             <div style={{ fontWeight: 'bold', fontSize: 16, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <img 
-                src="/app-icon.svg" 
+                src={logo} 
                 alt="飞书文档导出助手" 
                 style={{ width: 24, height: 24 }}
               />
