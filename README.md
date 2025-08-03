@@ -171,8 +171,6 @@ http://localhost:3001/callback
 - **云盘文件**: 在主界面展开「我的云盘」节点浏览文件
 - **知识库**: 展开「知识库」节点浏览各个知识空间的文档
 
-![主界面文件浏览](docs/home.jpg)
-
 #### 下载文件
 1. 选择要下载的文件或文件夹（支持多选）
 2. 点击「下载选中项」按钮
@@ -185,10 +183,6 @@ http://localhost:3001/callback
 - 支持暂停、恢复、删除任务
 - 点击「查看文件」可查看任务中的具体文件列表
 - 点击「打开文件夹」可直接打开下载目录
-
-![任务管理界面](docs/task_list.jpg)
-
-![文件列表详情](docs/file_list.jpg)
 
 ## 🔧 开发指南
 
@@ -297,8 +291,6 @@ npm run preview
 如果您在使用过程中遇到问题，可以通过以下方式获取帮助：
 
 - 📋 [提交 Issue](https://github.com/ytcheng/feishu_docs_export/issues)
-- 📧 发送邮件至：your-email@example.com
-- 💬 加入讨论群：[链接]
 
 ---
 
