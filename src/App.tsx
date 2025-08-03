@@ -6,7 +6,6 @@ import AuthPage from './components/AuthPage';
 import HomePage from './components/HomePage';
 import TaskListPage from './components/TaskListPage';
 import SettingsPage from './components/SettingsPage';
-import ErrorBoundary from './components/ErrorBoundary';
 import { UserInfo } from './types';
 import { TokenExpiredEvent, AuthSuccessEvent } from './types/event';
 import './App.css';
@@ -169,36 +168,6 @@ const App: React.FC = () => {
     };
   }, [authed]);
 
-  // 根据当前页面状态渲染不同组件
-  if (currentPage === 'settings') {
-    return (
-      <ConfigProvider>
-        <AntdApp>
-          <ErrorBoundary>
-            <SettingsPage 
-              onConfigSaved={handleConfigSaved}
-              onBack={hasValidConfig ? () => setCurrentPage('auth') : undefined}
-            />
-          </ErrorBoundary>
-        </AntdApp>
-      </ConfigProvider>
-    );
-  }
-
-  if (currentPage === 'auth' || !authed) {
-    return (
-      <ConfigProvider>
-        <AntdApp>
-          <ErrorBoundary>
-            <AuthPage 
-              onGoToSettings={() => setCurrentPage('settings')}
-            />
-          </ErrorBoundary>
-        </AntdApp>
-      </ConfigProvider>
-    );
-  }
-
   /**
    * 用户菜单项
    */
@@ -244,8 +213,10 @@ const App: React.FC = () => {
             )}
           </Header>
           <Content style={{ padding: '24px', minHeight: 'calc(100vh - 64px)' }}>
-            {currentPage === 'home' && <HomePage onViewTasks={() => setCurrentPage('list')} />}
-            {currentPage === 'list' && <TaskListPage onGoBack={() => setCurrentPage('home')} />}
+            {currentPage === 'settings' && <SettingsPage onConfigSaved={handleConfigSaved} onBack={hasValidConfig ? () => setCurrentPage('auth') : undefined} />}
+            {(currentPage === 'auth' || !authed) && <AuthPage onGoToSettings={() => setCurrentPage('settings')} />}
+            {currentPage === 'home' && authed && <HomePage onViewTasks={() => setCurrentPage('list')} />}
+            {currentPage === 'list' && authed && <TaskListPage onGoBack={() => setCurrentPage('home')} />}
           </Content>
         </Layout>
       </AntdApp>
