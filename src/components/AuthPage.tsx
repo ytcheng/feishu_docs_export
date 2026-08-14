@@ -9,7 +9,7 @@ import { emit } from '@tauri-apps/api/event';
 
 const { Title, Paragraph } = Typography;
 
-const FEISHU_APP_ID = 'cli_a1ad86f33c38500d';
+const FEISHU_APP_ID = feishuApi.config?.appId ?? 'cli_a1ad86f33c38500d';
 const FEISHU_SCOPE = 'docs:doc docs:document.media:download docs:document:export docx:document drive:drive drive:file drive:file:download offline_access';
 // const FEISHU_REDIRECT_URI = 'http://localhost:{}/callback';
 
