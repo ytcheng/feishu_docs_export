@@ -4,7 +4,7 @@ import { feishuApi } from '../utils/feishuApi';
 import { openUrl} from '@tauri-apps/plugin-opener'
 import { start, cancel, onUrl } from '@fabianlars/tauri-plugin-oauth';
 import { emit } from '@tauri-apps/api/event';
-import { loadFeishuConfig } from '../utils/feishuConfig';
+import { FeishuConfig } from '../utils/feishuConfig';
 import { buildFeishuAuthorizeUrl } from '../utils/feishuAuth';
 import { UserInfo } from '../types';
 
@@ -15,8 +15,6 @@ const { Title, Paragraph } = Typography;
 const FEISHU_SCOPE = 'docs:doc docs:document.media:download docs:document:export docx:document drive:drive drive:file drive:file:download offline_access';
 // const FEISHU_REDIRECT_URI = 'http://localhost:{}/callback';
 
-// 全局标记，防止多个组件实例同时初始化QR码
-let globalQRInitialized = false;
 
 /**
  * 授权数据接口
@@ -42,14 +40,13 @@ interface QRLoginOptions {
 
 interface AuthWindow extends Window {
   QRLogin?: (options: QRLoginOptions) => QRLoginInstance;
-  attachEvent?: (type: 'onmessage', listener: (event: MessageEvent) => void) => void;
-  detachEvent?: (type: 'onmessage', listener: (event: MessageEvent) => void) => void;
 }
 
 /**
  * 飞书授权页面组件属性
  */
 interface AuthPageProps {
+  authConfig: FeishuConfig | null;
   onGoToSettings?: () => void;
 }
 
@@ -57,21 +54,17 @@ interface AuthPageProps {
  * 飞书授权页面组件
  * 适配Tauri版本
  */
-const AuthPage: React.FC<AuthPageProps> = ({ onGoToSettings }) => {
+const AuthPage: React.FC<AuthPageProps> = ({ authConfig, onGoToSettings }) => {
   const { message } = App.useApp();
   const authWindow = window as AuthWindow;
   const [scriptLoaded, setScriptLoaded] = useState(false);
-  const [authConfig] = useState(() => loadFeishuConfig());
   useEffect(() => {
     if (!authConfig) {
-      setScriptLoaded(true);
       message.error('请先在设置页填写完整的飞书应用配置');
     }
   }, [authConfig, message]);
   const qrContainerRef = useRef<HTMLDivElement>(null);
-  const messageHandlerRef = useRef<((event: MessageEvent) => void) | null>(null);
-  const qrInitializedRef = useRef<boolean>(false);
-  const port = useRef(0);
+  const [callback, setCallback] = useState<{ config: FeishuConfig; port: number } | null>(null);
   const redirectUri = useRef('');
   const isProcessingAuth = useRef(false); // 添加授权处理标记
   
@@ -118,266 +111,139 @@ const AuthPage: React.FC<AuthPageProps> = ({ onGoToSettings }) => {
   }, [message]);
 
 
-  //启动回调服务器
+  // Register the callback before starting the server. Each effect owns its resources,
+  // including resources that finish initializing after cleanup (StrictMode/navigation).
   useEffect(() => {
-    if (!authConfig) {
-      return;
-    }
+    setCallback(null);
+    if (!authConfig) return;
 
-    const run = async () => {
-      const oauthConfig = {
-        ports: [3000, 3001],
-        response: 'OAuth finished. You may close this tab.<script>setTimeout(() => { window.close(); }, 1000);</script>'
-      };
-
-      port.current = await start(oauthConfig);
-      console.log('监听端口:', port.current);
-
-      
-    };
-    run();
-
-    const handleBeforeUnload = () => {
-      console.log('页面即将刷新/关闭，取消监听端口:', port.current);
-      if (port.current) {
-        cancel(port.current);
+    let disposed = false;
+    let serverPort = 0;
+    let unlisten: (() => void) | undefined;
+    const stopServer = () => {
+      if (serverPort) {
+        const stoppedPort = serverPort;
+        serverPort = 0;
+        void cancel(stoppedPort).catch(console.error);
       }
     };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    const handleUnload = () => {
-      console.log('unload 触发了');
-      if (port.current) {
-        cancel(port.current);
-      }
-    };
-
-    window.addEventListener('unload', handleUnload);
-
-
-    return () => {
-      console.log('取消监听端口:', port.current);
-      if (port.current) {
-        cancel(port.current);
-      }
-      // 重置授权处理标记
-      isProcessingAuth.current = false;
-    }
-  }, [authConfig]);
-  
-  /**
-   * 监听URL变化，检测授权回调
-   */
-  useEffect(() => {
-    if (!authConfig) {
-      return;
-    }
-
-    let unlistenRef: (() => void) | null = null;
-    
-    const checkAuthCallback = (url: string) => {
-      console.log('收到url:', url);
-      const urlObj = new URL(url);
-      const urlParams = new URLSearchParams(urlObj.search);
-      console.log('收到params:', urlParams);
-      const code = urlParams.get('code');
-      console.log('收到code:', code);
-      if (code) {
-        handleAuthCallback(code);
-        cancel(port.current);
-        port.current = 0;
-        // 授权成功后立即清理监听器
-        if (unlistenRef) {
-          console.log('授权成功，取消监听url');
-          unlistenRef();
-          unlistenRef = null;
+    const initialize = async () => {
+      try {
+        const removeListener = await onUrl((url) => {
+          if (disposed) return;
+          const code = new URL(url).searchParams.get('code');
+          if (code) {
+            void handleAuthCallback(code);
+            stopServer();
+          }
+        });
+        if (disposed) {
+          removeListener();
+          return;
+        }
+        unlisten = removeListener;
+        const startedPort = await start({
+          ports: [3000, 3001],
+          response: 'OAuth finished. You may close this tab.<script>setTimeout(() => { window.close(); }, 1000);</script>'
+        });
+        serverPort = startedPort;
+        if (disposed) {
+          stopServer();
+          return;
+        }
+        redirectUri.current = `http://localhost:${startedPort}/callback`;
+        setCallback({ config: authConfig, port: startedPort });
+      } catch (error) {
+        unlisten?.();
+        unlisten = undefined;
+        if (!disposed) {
+          console.error('初始化授权回调失败:', error);
+          message.error('初始化授权回调失败，请重试');
         }
       }
     };
-
-    // 设置URL监听器
-    const setupUrlListener = async () => {
-      try {
-        unlistenRef = await onUrl(checkAuthCallback);
-        console.log('URL监听器已设置');
-      } catch (error) {
-        console.error('设置URL监听器失败:', error);
-      }
-    };
-    
-    // 延迟设置监听器，确保端口已经启动
-    const timeoutId = setTimeout(setupUrlListener, 10);
-    
-    // 清理函数
+    void initialize();
+    window.addEventListener('beforeunload', stopServer);
+    window.addEventListener('unload', stopServer);
     return () => {
-      clearTimeout(timeoutId);
-      if (unlistenRef) {
-        console.log('组件卸载，取消监听url');
-        unlistenRef();
-        unlistenRef = null;
-      }
+      disposed = true;
+      window.removeEventListener('beforeunload', stopServer);
+      window.removeEventListener('unload', stopServer);
+      unlisten?.();
+      stopServer();
+      isProcessingAuth.current = false;
     };
-  }, [authConfig, handleAuthCallback]);
+  }, [authConfig, handleAuthCallback, message]);
 
-  /**
-   * 加载飞书QR登录脚本
-   */
+  /** Load the shared SDK, but wait for its actual load event on remount. */
   useEffect(() => {
-    // 检查是否已插入 script，避免多次插入
-    if (!authConfig) {
+    if (!authConfig) return;
+    if (authWindow.QRLogin) {
+      setScriptLoaded(true);
       return;
     }
-
-    if (!document.getElementById('feishu-qr-script')) {
-      const script = document.createElement('script');
+    setScriptLoaded(false);
+    let script = document.getElementById('feishu-qr-script') as HTMLScriptElement | null;
+    const isNew = !script;
+    if (!script) {
+      script = document.createElement('script');
       script.id = 'feishu-qr-script';
       script.src = 'https://lf-package-cn.feishucdn.com/obj/feishu-static/lark/passport/qrcode/LarkSSOSDKWebQRCode-1.0.3.js';
       script.async = true;
-      script.onload = () => {
-        setScriptLoaded(true);
-      };
-      script.onerror = () => {
-        console.error('加载飞书QR登录脚本失败');
-        message.error('加载登录组件失败，请检查网络连接');
-      };
-      document.body.appendChild(script);
-    } else {
-      setScriptLoaded(true);
     }
-  }, [authConfig, message]);
-
-  /**
-   * 初始化飞书QR登录（只执行一次）
-   */
-  useEffect(() => {
-    if (!authConfig || !scriptLoaded || !qrContainerRef.current || qrInitializedRef.current || globalQRInitialized) return;
-
-    // 双重检查，防止React严格模式导致的重复执行
-    if (qrInitializedRef.current || globalQRInitialized) return;
-    qrInitializedRef.current = true;
-    globalQRInitialized = true;
-
-    const containerId = 'feishu-qr-container';
-    const qrContainer = qrContainerRef.current;
-    qrContainer.id = containerId;
-
-    const qrLogin = authWindow.QRLogin;
-    if (qrLogin) {
-      
-      
-      // 延迟初始化，确保DOM已经准备好
-      setTimeout(async () => {
-        // 再次检查是否已经初始化（防止多个setTimeout同时执行）
-        if (!qrInitializedRef.current) return;
-
-        redirectUri.current = `http://localhost:${port.current}/callback`;
-        console.log("redirectUri", redirectUri.current);
-        const goto = buildFeishuAuthorizeUrl({
-          appId: authConfig.appId,
-          redirectUri: redirectUri.current,
-          scope: FEISHU_SCOPE,
-        });
-        console.log("goto", goto);
-        try {
-          // 清理页面中所有可能存在的飞书QR码元素
-          const existingQRIframes = document.querySelectorAll('iframe[src*="feishu"], iframe[src*="lark"]');
-          existingQRIframes.forEach(iframe => {
-            console.log('清理已存在的飞书QR码iframe');
-            iframe.remove();
-          });
-          
-          // 清理所有可能的QR容器
-          const existingContainers = document.querySelectorAll('#feishu-qr-container');
-          existingContainers.forEach((container, index) => {
-            if (index > 0) { // 保留第一个，清理其他的
-              console.log('清理重复的QR容器');
-              container.innerHTML = '';
-            }
-          });
-          
-          // 检查容器是否已经有内容（防止重复初始化）
-          if (qrContainerRef.current && qrContainerRef.current.children.length > 0) {
-            console.log('QR码容器已存在内容，跳过初始化');
-            return;
-          }
-          
-          // 清空容器内容
-          if (qrContainerRef.current) {
-            qrContainerRef.current.innerHTML = '';
-          }
-          
-          console.log('开始初始化飞书QR码...');
-          
-          const QRLoginObj = qrLogin({
-            id: containerId,
-            goto,
-            width: '300',
-            height: '300',
-            style: 'width:300px;height:300px;border:none;'
-          });
-
-          // 飞书文档要求的 message 监听
-          const handleMessage = async function (event: MessageEvent) {
-            console.log("handleMessage", event, QRLoginObj);
-            if (QRLoginObj && QRLoginObj.matchOrigin && QRLoginObj.matchData && 
-                QRLoginObj.matchOrigin(event.origin) && QRLoginObj.matchData(event.data)) {
-              console.log("handleMessage matched", QRLoginObj, event);
-              const loginTmpCode = (event.data as { tmp_code?: string }).tmp_code;
-              const authUrl = `${goto}&tmp_code=${loginTmpCode}`;
-              console.log("authUrl", authUrl);
-
-
-              await onUrl((url) => {
-                console.log('Received OAuth URL:', url);
-              // Handle the OAuth redirect
-              });
-              openUrl(authUrl);
-              // await cancel(port);
-              // 在Tauri中直接跳转到授权页面
-              // window.location.href = authUrl;
-              // window.open(authUrl, '_blank');
-              // openUrl(authUrl);
-              // console.log("跳转到授权页面");
-            }
-          };
-          
-          messageHandlerRef.current = handleMessage;
-          
-          if (typeof window.addEventListener != 'undefined') {
-            window.addEventListener('message', handleMessage, false);
-          } else if (typeof authWindow.attachEvent != 'undefined') {
-            authWindow.attachEvent('onmessage', handleMessage);
-          }
-        } catch (error) {
-          console.error('初始化飞书QR登录失败:', error);
-          message.error('初始化登录组件失败');
-          // 如果初始化失败，重置标记以便重试
-          qrInitializedRef.current = false;
-          globalQRInitialized = false;
-        }
-      }, 100);
-    }
-
-    return () => {
-      // 清理事件监听器
-      if (messageHandlerRef.current) {
-        if (typeof window.removeEventListener != 'undefined') {
-          window.removeEventListener('message', messageHandlerRef.current, false);
-        } else if (typeof authWindow.detachEvent != 'undefined') {
-          authWindow.detachEvent('onmessage', messageHandlerRef.current);
-        }
-        messageHandlerRef.current = null;
-      }
-      
-      // 清理QR容器内容
-      qrContainer.innerHTML = '';
-      
-      // 重置初始化标记
-      qrInitializedRef.current = false;
-      globalQRInitialized = false;
+    const onLoad = () => setScriptLoaded(true);
+    const onError = () => {
+      script.remove();
+      message.error('加载登录组件失败，请检查网络连接');
     };
-  }, [authConfig, authWindow, message, scriptLoaded]);
+    script.addEventListener('load', onLoad);
+    script.addEventListener('error', onError);
+    if (isNew) document.body.appendChild(script);
+    return () => {
+      script.removeEventListener('load', onLoad);
+      script.removeEventListener('error', onError);
+      // A script that fails while no page is listening cannot be reused.
+      if (!authWindow.QRLogin) script.remove();
+    };
+  }, [authConfig, authWindow, message]);
+
+  /** Only render a QR code after both the SDK and callback server are ready. */
+  useEffect(() => {
+    const container = qrContainerRef.current;
+    const qrLogin = authWindow.QRLogin;
+    if (!authConfig || !scriptLoaded || callback?.config !== authConfig || !container || !qrLogin) return;
+
+    container.id = 'feishu-qr-container';
+    container.innerHTML = '';
+    const goto = buildFeishuAuthorizeUrl({
+      appId: authConfig.appId,
+      redirectUri: `http://localhost:${callback.port}/callback`,
+      scope: FEISHU_SCOPE,
+    });
+    try {
+      const qr = qrLogin({
+        id: container.id,
+        goto,
+        width: '300',
+        height: '300',
+        style: 'width:300px;height:300px;border:none;'
+      });
+      const handleMessage = (event: MessageEvent) => {
+        if (qr.matchOrigin(event.origin) && qr.matchData(event.data)) {
+          const loginTmpCode = (event.data as { tmp_code?: string }).tmp_code;
+          void openUrl(`${goto}&tmp_code=${encodeURIComponent(loginTmpCode ?? '')}`);
+        }
+      };
+      window.addEventListener('message', handleMessage);
+      return () => {
+        window.removeEventListener('message', handleMessage);
+        container.innerHTML = '';
+      };
+    } catch (error) {
+      console.error('初始化飞书QR登录失败:', error);
+      message.error('初始化登录组件失败');
+    }
+  }, [authConfig, authWindow, callback, message, scriptLoaded]);
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>

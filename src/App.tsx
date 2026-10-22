@@ -10,6 +10,7 @@ import { UserInfo } from './types';
 import { TokenExpiredEvent, AuthSuccessEvent } from './types/event';
 import './App.css';
 import { feishuApi, FeishuApi, FeishuConfig } from './utils/feishuApi';
+import { loadFeishuConfig } from './utils/feishuConfig';
 import { activeDownloadsManager, resumeDownloadingTasks } from './utils/taskManager';
 
 
@@ -17,6 +18,7 @@ const { Header, Content } = Layout;
 const { Text } = Typography;
 
 const App: React.FC = () => {
+  const [authConfig, setAuthConfig] = useState(loadFeishuConfig);
   const [authed, setAuthed] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [currentPage, setCurrentPage] = useState<'home' | 'list' | 'settings' | 'auth'>('home');
@@ -72,6 +74,7 @@ const App: React.FC = () => {
   const handleConfigSaved = (config: FeishuConfig) => {
     // 重新设置 feishuApi 实例
     FeishuApi.resetInstance(config);
+    setAuthConfig(config);
     setHasValidConfig(true);
     setCurrentPage('auth');
   };
@@ -214,7 +217,7 @@ const App: React.FC = () => {
           </Header>
           <Content style={{ padding: '24px', minHeight: 'calc(100vh - 64px)' }}>
             {currentPage === 'settings' && <SettingsPage onConfigSaved={handleConfigSaved} onBack={hasValidConfig ? () => setCurrentPage('auth') : undefined} />}
-            {(currentPage === 'auth' || !authed) && <AuthPage onGoToSettings={() => setCurrentPage('settings')} />}
+            {currentPage === 'auth' && <AuthPage authConfig={authConfig} onGoToSettings={() => setCurrentPage('settings')} />}
             {currentPage === 'home' && authed && <HomePage onViewTasks={() => setCurrentPage('list')} />}
             {currentPage === 'list' && authed && <TaskListPage onGoBack={() => setCurrentPage('home')} />}
           </Content>
