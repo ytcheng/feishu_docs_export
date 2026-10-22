@@ -22,16 +22,13 @@ import {
 import { FeishuFile, FeishuWikiNode, FeishuWikiSpace } from '../types';
 import { createTauriAdapter } from './http';
 import { TokenExpiredEvent } from '../types/event';
+import { FeishuConfig, loadFeishuConfig } from './feishuConfig';
 const FEISHU_SCOPE = 'docs:doc docs:document.media:download docs:document:export docx:document drive:drive drive:file drive:file:download offline_access';
 
 /**
  * 飞书配置接口
  */
-export interface FeishuConfig {
-  appId: string;
-  appSecret: string;
-  endpoint: string;
-}
+export type { FeishuConfig } from './feishuConfig';
 
 /**
  * 飞书API客户端类
@@ -124,6 +121,11 @@ export class FeishuApi {
    * 从 localStorage 加载飞书配置
    */
   static loadConfig(): FeishuConfig {
+    const sharedConfig = loadFeishuConfig();
+    if (sharedConfig) {
+      return sharedConfig;
+    }
+
     try {
       const configStr = localStorage.getItem('feishu_config');
       if (configStr) {
@@ -148,6 +150,10 @@ export class FeishuApi {
    * 检查是否存在有效的飞书配置
    */
   static hasValidConfig(): boolean {
+    if (loadFeishuConfig()) {
+      return true;
+    }
+
     try {
       const configStr = localStorage.getItem('feishu_config');
       if (configStr) {
@@ -383,7 +389,7 @@ export class FeishuApi {
   ): Promise<FeishuFilesPagination> {
     const { pageSize = 200, pageToken, orderBy, direction } = options;
     
-    const params: any = {
+    const params: Record<string, string | number> = {
       folder_token: folderId,
       page_size: pageSize,
       user_id_type: 'user_id',
@@ -435,7 +441,7 @@ export class FeishuApi {
   ): Promise<FeishuWikiSpacesPagination> {
     const { pageSize = 20, pageToken } = options;
     
-    const params: any = {
+    const params: Record<string, string | number> = {
       page_size: pageSize,
       user_id_type: 'user_id',
     };
@@ -479,7 +485,7 @@ export class FeishuApi {
   ): Promise<FeishuWikiNodesPagination> {
     const { pageSize = 50, pageToken, parentNodeToken } = options;
     
-    const params: any = {
+    const params: Record<string, string | number> = {
       space_id: spaceId,
       page_size: pageSize,
       user_id_type: 'user_id',
