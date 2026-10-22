@@ -1,7 +1,7 @@
 {
   "name": "feishu_docs_export",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.9",
   "type": "module",
   "scripts": {
     "dev": "vite",

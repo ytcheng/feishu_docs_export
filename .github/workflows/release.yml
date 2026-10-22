@@ -48,7 +48,10 @@ jobs:
         # You can remove the one that doesn't apply to your app to speed up the workflow a bit.
 
       - name: install frontend dependencies
-        run: yarn install # change this to npm, pnpm or bun depending on which one you use.
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm test
 
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -60,3 +63,72 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  # One-time publication authorized for v1.0.9. Later versions remain drafts.
+  publish-v1-0-9:
+    needs: publish-tauri
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check one-time release version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$VERSION" = "1.0.9" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify complete v1.0.9 release and publish
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release view v1.0.9 --json tagName,isDraft,targetCommitish,assets > release.json
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const release = require('./release.json');
+          const expected = [
+            'feishu_docs_export-1.0.9-1.x86_64.rpm',
+            'feishu_docs_export_1.0.9_aarch64.dmg',
+            'feishu_docs_export_1.0.9_amd64.AppImage',
+            'feishu_docs_export_1.0.9_amd64.deb',
+            'feishu_docs_export_1.0.9_x64-setup.exe',
+            'feishu_docs_export_1.0.9_x64.dmg',
+            'feishu_docs_export_1.0.9_x64_en-US.msi',
+            'feishu_docs_export_aarch64.app.tar.gz',
+            'feishu_docs_export_x64.app.tar.gz',
+          ];
+          assert.equal(release.tagName, 'v1.0.9');
+          assert.equal(release.isDraft, true, 'Release must still be a draft');
+          assert.equal(release.targetCommitish, process.env.GITHUB_SHA, 'Unexpected release target');
+          assert.deepEqual(release.assets.map(asset => asset.name).sort(), expected.sort());
+          assert.ok(release.assets.every(asset => asset.size > 0), 'Empty release asset');
+          NODE
+          # A draft release may not have created its tag yet. Only a confirmed
+          # HTTP 404 authorizes creating the missing tag; other read errors fail.
+          if ! gh api --include "repos/$GH_REPO/git/ref/tags/v1.0.9" > tag-response.txt 2> tag-error.txt; then
+            STATUS=$(awk '$1 ~ /^HTTP\// { status = $2 } END { print status }' tag-response.txt)
+            if [ "$STATUS" != "404" ]; then
+              cat tag-error.txt >&2
+              exit 1
+            fi
+            gh api --method POST "repos/$GH_REPO/git/refs" -f ref=refs/tags/v1.0.9 -f sha="$GITHUB_SHA"
+          fi
+          TAG_SHA=$(gh api "repos/$GH_REPO/commits/v1.0.9" --jq '.sha')
+          test "$TAG_SHA" = "$GITHUB_SHA"
+          cat > release-notes.md <<'NOTES'
+          ## 修复
+          - 二维码登录与授权码换取令牌统一使用用户配置的飞书 App ID，修复应用配置不一致导致的登录失败。
+          - 配置缺失或不完整时提示先完善配置，避免发起无效授权。
+          - 改善登录取消、关闭及重试时的异步状态处理，并补充回归测试。
+
+          ## 下载
+          提供 macOS Apple Silicon / Intel、Windows x64 和 Linux x64 安装包。
+          签名方式沿用此前版本：macOS 为 ad-hoc 签名，未增加 Apple 公证或 Windows 代码签名。
+          NOTES
+          gh release edit v1.0.9 --title "Feishu Export v1.0.9" --notes-file release-notes.md --draft=false
